@@ -1,0 +1,148 @@
+const mongoose = require('mongoose');
+
+const organizationSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true, 'Organization name is required'],
+        unique: true,
+        trim: true,
+        uppercase: true
+    },
+    code: {
+        type: String,
+        unique: true,
+        trim: true,
+        uppercase: true
+    },
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true,
+        match: [/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Please provide a valid email']
+    },
+    website: {
+        type: String,
+        trim: true,
+        match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please provide a valid website URL']
+    },
+    alias: {
+        type: String,
+        trim: true,
+        uppercase: true
+    },
+    phone: {
+        type: String,
+        trim: true
+    },
+    address: {
+        street: {
+            type: String,
+            trim: true
+        },
+        city: {
+            type: String,
+            trim: true
+        },
+        state: {
+            type: String,
+            trim: true
+        },
+        country: {
+            type: String,
+            trim: true,
+            default: 'India'
+        },
+        pincode: {
+            type: String,
+            trim: true
+        }
+    },
+    logo: {
+        type: String,
+        trim: true
+    },
+    description: {
+        type: String,
+        trim: true
+    },
+    admin: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    status: {
+        type: String,
+        enum: ['active', 'inactive'],
+        default: 'active'
+    },
+    deletedAt: {
+        type: Date,
+        default: null
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+// Auto-generate organization code before saving
+organizationSchema.pre('save', async function (next) {
+    this.updatedAt = Date.now();
+
+    // Generate code only for new organizations
+    if (this.isNew && !this.code) {
+        try {
+            // Find the highest code number
+            const lastOrg = await this.constructor.findOne({}, { code: 1 })
+                .sort({ code: -1 })
+                .limit(1);
+
+            let nextNumber = 1;
+            if (lastOrg && lastOrg.code) {
+                const match = lastOrg.code.match(/ORG-(\d+)/);
+                if (match) {
+                    nextNumber = parseInt(match[1]) + 1;
+                }
+            }
+
+            this.code = `ORG-${String(nextNumber).padStart(3, '0')}`;
+        } catch (error) {
+            return next(error);
+        }
+    }
+
+    next();
+});
+
+// Query helper to exclude soft-deleted organizations
+organizationSchema.query.notDeleted = function () {
+    return this.where({ deletedAt: null });
+};
+
+// Query helper to get only deleted organizations
+organizationSchema.query.onlyDeleted = function () {
+    return this.where({ deletedAt: { $ne: null } });
+};
+
+// Instance method for soft delete
+organizationSchema.methods.softDelete = function () {
+    this.deletedAt = Date.now();
+    return this.save();
+};
+
+// Instance method to restore soft-deleted organization
+organizationSchema.methods.restore = function () {
+    this.deletedAt = null;
+    return this.save();
+};
+
+// Indexes for faster queries
+organizationSchema.index({ status: 1 });
+organizationSchema.index({ deletedAt: 1 });
+
+module.exports = mongoose.model('Organization', organizationSchema);

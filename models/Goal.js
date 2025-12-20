@@ -1,0 +1,93 @@
+const mongoose = require('mongoose');
+
+const formFieldSchema = new mongoose.Schema({
+    fieldName: {
+        type: String,
+        required: true
+    },
+    fieldType: {
+        type: String,
+        enum: ['text', 'number', 'date', 'dropdown', 'email', 'phone', 'multiContact', 'autoNumber', 'autoCalculate', 'textarea'],
+        required: true
+    },
+    alias: {
+        type: String,
+        required: true
+    },
+    mandatory: {
+        type: Boolean,
+        default: false
+    },
+    options: [{
+        type: String
+    }],
+    calculation: {
+        type: String // For auto-calculate fields
+    },
+    maxContacts: {
+        type: Number,
+        default: 5 // For multiContact fields
+    },
+    order: {
+        type: Number,
+        default: 0
+    }
+}, { _id: false });
+
+const goalSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: [true, 'Goal title is required'],
+        trim: true
+    },
+    description: {
+        type: String,
+        trim: true
+    },
+    target: {
+        type: Number
+    },
+    timeline: {
+        startDate: Date,
+        endDate: Date
+    },
+    groups: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Group',
+        required: true
+    }],
+    formSchema: [formFieldSchema],
+    statusOptions: [{
+        type: String
+    }],
+    pointsConfig: {
+        entryCreation: { type: Number, default: 10 },
+        statusUpdate: { type: Number, default: 5 },
+        fieldCompletion: { type: Number, default: 2 }
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    status: {
+        type: String,
+        enum: ['active', 'inactive', 'completed'],
+        default: 'active'
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+goalSchema.pre('save', function (next) {
+    this.updatedAt = Date.now();
+    next();
+});
+
+module.exports = mongoose.model('Goal', goalSchema);
