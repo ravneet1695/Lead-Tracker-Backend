@@ -3,6 +3,8 @@ const router = express.Router();
 const User = require('../models/User');
 const Organization = require('../models/Organization');
 const Role = require('../models/Role');
+const Goal = require('../models/Goal');
+const GoalEntry = require('../models/GoalEntry');
 const Gamification = require('../models/Gamification');
 const { requireAuth } = require('../middleware/auth');
 const { getRoleName } = require('../helpers/commonHelpers');
@@ -118,8 +120,13 @@ async function getOrgAdminDashboard(user) {
 
     const organization = await Organization.findById(user.organization);
     const orgUsers = await User.countDocuments({ organization: user.organization });
-    const orgManagers = await User.countDocuments({ organization: user.organization, role: 'manager' });
-    const orgSales = await User.countDocuments({ organization: user.organization, role: 'sales' });
+
+    // Get role counts by populating and filtering
+    const managerRole = await Role.findOne({ name: 'manager' });
+    const salesRole = await Role.findOne({ name: 'sales' });
+
+    const orgManagers = managerRole ? await User.countDocuments({ organization: user.organization, role: managerRole._id }) : 0;
+    const orgSales = salesRole ? await User.countDocuments({ organization: user.organization, role: salesRole._id }) : 0;
 
     const usersByRole = await User.aggregate([
         { $match: { organization: user.organization } },
@@ -155,9 +162,12 @@ async function getOrgAdminDashboard(user) {
 
 // Manager Dashboard - Team view
 async function getManagerDashboard(user) {
+    // Get sales role ID
+    const salesRole = await Role.findOne({ name: 'sales' });
+
     const teamMembers = await User.find({
         groups: { $in: user.groups },
-        role: 'sales'
+        role: salesRole ? salesRole._id : null
     });
 
     const teamMemberIds = teamMembers.map(m => m._id);

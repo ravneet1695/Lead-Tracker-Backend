@@ -51,6 +51,11 @@ const goalSchema = new mongoose.Schema({
         startDate: Date,
         endDate: Date
     },
+    organization: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        required: [true, 'Organization is required']
+    },
     groups: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Group',
