@@ -29,40 +29,13 @@ const defaultRoles = [
             'goals.read',
             'goals.update',
             'goals.delete',
+            'leads.create',
+            'leads.read',
+            'leads.update',
+            'leads.delete',
             'reports.read',
-            'dashboard.read'
-        ],
-        isSystem: true,
-        isActive: true
-    },
-    {
-        name: 'manager',
-        label: 'Manager',
-        description: 'Team management and reporting access',
-        permissions: [
-            'users.read',
-            'groups.read',
-            'goals.read',
-            'goals.update',
-            'goal-entries.create',
-            'goal-entries.read',
-            'goal-entries.update',
-            'reports.read',
-            'dashboard.read'
-        ],
-        isSystem: true,
-        isActive: true
-    },
-    {
-        name: 'sales',
-        label: 'Sales',
-        description: 'Basic sales user access',
-        permissions: [
-            'goals.read',
-            'goal-entries.create',
-            'goal-entries.read',
-            'goal-entries.update',
-            'dashboard.read'
+            'dashboard.read',
+            'audit-logs.read'
         ],
         isSystem: true,
         isActive: true
