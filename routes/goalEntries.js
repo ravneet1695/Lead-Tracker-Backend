@@ -111,8 +111,8 @@ router.post('/', requireAuth, async (req, res) => {
     try {
         const { goal, group, data, status, contacts, remarks } = req.body;
 
-        // Verify goal exists
-        const goalDoc = await Goal.findById(goal);
+        // Verify goal exists and populate groups
+        const goalDoc = await Goal.findById(goal).populate('groups');
         if (!goalDoc) {
             return res.status(404).json({
                 success: false,
@@ -120,20 +120,116 @@ router.post('/', requireAuth, async (req, res) => {
             });
         }
 
+        // Verify user belongs to one of the goal's assigned groups
+        const userGroups = req.user.groups || [];
+        const goalGroupIds = goalDoc.groups.map(g => g._id.toString());
+        const hasAccess = userGroups.some(userGroupId =>
+            goalGroupIds.includes(userGroupId.toString())
+        );
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: 'You are not assigned to any groups for this goal'
+            });
+        }
+
+        // Validate group is one of the goal's groups
+        if (!goalGroupIds.includes(group)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Selected group is not assigned to this goal'
+            });
+        }
+
+        // Validate required form fields
+        if (goalDoc.formSchema && goalDoc.formSchema.length > 0) {
+            const missingFields = [];
+
+            for (const field of goalDoc.formSchema) {
+                if (field.mandatory && (!data || !data[field.fieldName])) {
+                    missingFields.push(field.alias || field.fieldName);
+                }
+            }
+
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Missing required fields: ${missingFields.join(', ')}`
+                });
+            }
+        }
+
         const entry = await GoalEntry.create({
             goal,
             user: req.user.id,
             group,
             data,
-            status: status || 'Initiated',
+            status: status || goalDoc.statusOptions?.[0] || 'New',
             contacts,
             remarks
         });
 
         // Award points for entry creation
         const gamification = await Gamification.findOne({ user: req.user.id });
-        if (gamification) {
-            await gamification.addPoints(goalDoc.pointsConfig.entryCreation);
+        if (gamification && goalDoc.pointsConfig) {
+            await gamification.addPoints(goalDoc.pointsConfig.entryCreation || 10);
+        }
+
+        // Check if goal target is reached based on revenue or lead count
+        let goalCompleted = false;
+        const completionStatus = goalDoc.completionStatus || 'Approved';
+
+        if (goalDoc.target && goalDoc.status !== 'completed') {
+            // Auto-detect first numeric field from formSchema
+            const numericField = goalDoc.formSchema?.find(f => f.fieldType === 'number');
+
+            if (numericField) {
+                // Revenue-based goal completion
+                const completedEntries = await GoalEntry.find({
+                    goal: goalDoc._id,
+                    status: completionStatus
+                });
+
+                const achievedValue = completedEntries.reduce((sum, entry) => {
+                    const value = entry.data?.[numericField.fieldName];
+                    return sum + (parseFloat(value) || 0);
+                }, 0);
+
+                if (achievedValue >= goalDoc.target) {
+                    await Goal.findByIdAndUpdate(goalDoc._id, {
+                        status: 'completed',
+                        completedAt: new Date()
+                    });
+
+                    // Award bonus points for goal completion (50 points)
+                    if (gamification) {
+                        await gamification.addPoints(50);
+                    }
+
+                    goalCompleted = true;
+                }
+            } else {
+                // Count-based goal completion (fallback)
+                const completedLeadCount = await GoalEntry.countDocuments({
+                    goal: goalDoc._id,
+                    status: completionStatus
+                });
+
+                if (completedLeadCount >= goalDoc.target) {
+                    await Goal.findByIdAndUpdate(goalDoc._id, {
+                        status: 'completed',
+                        completedAt: new Date()
+                    });
+
+                    // Award bonus points for goal completion (50 points)
+                    if (gamification) {
+                        await gamification.addPoints(50);
+                    }
+
+                    goalCompleted = true;
+                }
+            }
         }
 
         const populatedEntry = await GoalEntry.findById(entry._id)
@@ -143,13 +239,16 @@ router.post('/', requireAuth, async (req, res) => {
 
         res.status(201).json({
             success: true,
-            entry: populatedEntry
+            message: goalCompleted ? 'Lead created successfully! 🎉 Goal target reached!' : 'Lead created successfully',
+            entry: populatedEntry,
+            goalCompleted,
+            bonusPoints: goalCompleted ? 50 : 0
         });
     } catch (error) {
-        console.error(error);
+        console.error('Error creating goal entry:', error);
         res.status(500).json({
             success: false,
-            message: 'Server error'
+            message: 'Server error while creating lead'
         });
     }
 });

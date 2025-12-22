@@ -16,7 +16,6 @@ const fs = require('fs');
 router.get('/', requirePermissions('organizations.read'), async (req, res) => {
     try {
         const organizations = await Organization.find({})
-            .populate('createdBy', 'name email')
             .sort({ createdAt: -1 });
 
         res.json({
@@ -109,10 +108,6 @@ router.get('/:id', requirePermissions('organizations.read'), async (req, res) =>
 router.post('/', requirePermissions('organizations.create'), createAuditLog('CREATE', 'Organization'), async (req, res) => {
     try {
         const { name, email, website, alias, phone, address, logo, description, status, adminUser } = req.body;
-
-        // Log received data to verify mobile number
-        console.log('Received adminUser data:', adminUser);
-        console.log('Admin mobile number:', adminUser?.mobile);
 
         // Validate required fields
         if (!name || !email) {
