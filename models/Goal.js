@@ -70,6 +70,11 @@ const goalSchema = new mongoose.Schema({
         statusUpdate: { type: Number, default: 5 },
         fieldCompletion: { type: Number, default: 2 }
     },
+    completionStatus: {
+        type: String,
+        default: 'Approved',
+        // Status that indicates a lead counts toward goal achievement
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -79,6 +84,9 @@ const goalSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'inactive', 'completed'],
         default: 'active'
+    },
+    completedAt: {
+        type: Date
     },
     createdAt: {
         type: Date,

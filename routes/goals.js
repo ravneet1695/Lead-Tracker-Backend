@@ -30,10 +30,63 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
             .populate('createdBy', 'name email')
             .sort({ createdAt: -1 });
 
+        // Calculate progress for each goal
+        const GoalEntry = require('../models/GoalEntry');
+        const goalsWithProgress = await Promise.all(goals.map(async (goal) => {
+            // Get entries with completion status
+            const completionStatus = goal.completionStatus || 'Approved';
+            const allEntries = await GoalEntry.find({ goal: goal._id });
+            const completedEntries = await GoalEntry.find({
+                goal: goal._id,
+                status: completionStatus
+            });
+
+            let achievedValue = 0;
+            let progress;
+
+            // Auto-detect first numeric field from formSchema
+            const numericField = goal.formSchema?.find(f => f.fieldType === 'number');
+
+            // If numeric field exists and target is set, sum the values from that field
+            if (numericField && goal.target) {
+                achievedValue = completedEntries.reduce((sum, entry) => {
+                    const value = entry.data?.[numericField.fieldName];
+                    return sum + (parseFloat(value) || 0);
+                }, 0);
+
+                progress = {
+                    achieved: achievedValue,
+                    target: goal.target,
+                    percentage: Math.min((achievedValue / goal.target) * 100, 100),
+                    remaining: Math.max(0, goal.target - achievedValue),
+                    totalLeads: allEntries.length,
+                    completedLeads: completedEntries.length,
+                    unit: 'value' // Indicates this is value-based tracking
+                };
+            } else {
+                // Fallback to lead count if no numeric field
+                const leadCount = completedEntries.length;
+                progress = {
+                    achieved: leadCount,
+                    target: goal.target || 0,
+                    percentage: goal.target ? Math.min((leadCount / goal.target) * 100, 100) : 0,
+                    remaining: goal.target ? Math.max(0, goal.target - leadCount) : 0,
+                    totalLeads: allEntries.length,
+                    completedLeads: leadCount,
+                    unit: 'count' // Indicates this is count-based tracking
+                };
+            }
+
+            return {
+                ...goal.toObject(),
+                progress
+            };
+        }));
+
         res.json({
             success: true,
-            count: goals.length,
-            goals
+            count: goalsWithProgress.length,
+            goals: goalsWithProgress
         });
     } catch (error) {
         console.error(error);
@@ -71,9 +124,55 @@ router.get('/:id', requirePermissions('goals.read'), async (req, res) => {
             }
         }
 
+        // Calculate progress
+        const GoalEntry = require('../models/GoalEntry');
+        const completionStatus = goal.completionStatus || 'Approved';
+        const allEntries = await GoalEntry.find({ goal: goal._id });
+        const completedEntries = await GoalEntry.find({
+            goal: goal._id,
+            status: completionStatus
+        });
+
+        let achievedValue = 0;
+        let progress;
+
+        // Auto-detect first numeric field from formSchema
+        const numericField = goal.formSchema?.find(f => f.fieldType === 'number');
+
+        // If numeric field exists and target is set, sum the values from that field
+        if (numericField && goal.target) {
+            achievedValue = completedEntries.reduce((sum, entry) => {
+                const value = entry.data?.[numericField.fieldName];
+                return sum + (parseFloat(value) || 0);
+            }, 0);
+
+            progress = {
+                achieved: achievedValue,
+                target: goal.target,
+                percentage: Math.min((achievedValue / goal.target) * 100, 100),
+                remaining: Math.max(0, goal.target - achievedValue),
+                totalLeads: allEntries.length,
+                completedLeads: completedEntries.length,
+                unit: 'value'
+            };
+        } else {
+            // Fallback to lead count if no numeric field
+            const leadCount = completedEntries.length;
+            progress = {
+                achieved: leadCount,
+                target: goal.target || 0,
+                percentage: goal.target ? Math.min((leadCount / goal.target) * 100, 100) : 0,
+                remaining: goal.target ? Math.max(0, goal.target - leadCount) : 0,
+                totalLeads: allEntries.length,
+                completedLeads: leadCount,
+                unit: 'count'
+            };
+        }
+
         res.json({
             success: true,
-            goal
+            goal,
+            progress
         });
     } catch (error) {
         console.error(error);
@@ -117,7 +216,7 @@ router.get('/:id/form', requirePermissions('goals.read'), async (req, res) => {
 // @access  Private (Admin)
 router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig } = req.body;
+        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, completionStatus } = req.body;
 
         // Validate required fields
         if (!title || !groups || groups.length === 0) {
@@ -179,6 +278,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
             formSchema,
             statusOptions,
             pointsConfig,
+            completionStatus,
             createdBy: req.user.id
         });
 
@@ -205,7 +305,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
 // @access  Private (Admin)
 router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status } = req.body;
+        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status, completionStatus } = req.body;
 
         let goal = await Goal.findById(req.params.id);
 
@@ -259,7 +359,7 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
 
         goal = await Goal.findByIdAndUpdate(
             req.params.id,
-            { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status },
+            { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status, completionStatus },
             { new: true, runValidators: true }
         ).populate('organization', 'name code')
             .populate('groups', 'name code')
