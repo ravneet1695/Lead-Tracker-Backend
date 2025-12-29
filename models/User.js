@@ -46,8 +46,8 @@ const userSchema = new mongoose.Schema({
   }],
   code: {
     type: String,
-    unique: true,
     sparse: true
+    // Uniqueness enforced by compound index with organization
   },
   profileImage: {
     type: String,
@@ -69,20 +69,53 @@ userSchema.pre('save', async function (next) {
   // Generate code only for new users if not provided
   if (this.isNew && !this.code) {
     try {
-      // Find the last user by code
-      const lastUser = await this.constructor.findOne({}, { code: 1 })
-        .sort({ code: -1 })
-        .limit(1);
+      if (this.organization) {
+        // Organization-specific code generation
+        // Get organization to extract its code
+        const Organization = require('./Organization');
+        const org = await Organization.findById(this.organization);
 
-      let nextNumber = 1;
-      if (lastUser && lastUser.code) {
-        const match = lastUser.code.match(/USR(\d+)/);
-        if (match) {
-          nextNumber = parseInt(match[1]) + 1;
+        if (!org) {
+          return next(new Error('Organization not found'));
         }
-      }
 
-      this.code = `USR${String(nextNumber).padStart(4, '0')}`;
+        // Find the last user in this organization
+        const lastUser = await this.constructor.findOne(
+          { organization: this.organization },
+          { code: 1 }
+        )
+          .sort({ code: -1 })
+          .limit(1);
+
+        let nextNumber = 1;
+        if (lastUser && lastUser.code) {
+          // Extract number from format: ORG-XXX-USRXXXX
+          const match = lastUser.code.match(/USR(\d+)$/);
+          if (match) {
+            nextNumber = parseInt(match[1]) + 1;
+          }
+        }
+
+        this.code = `${org.code}-USR${String(nextNumber).padStart(4, '0')}`;
+      } else {
+        // Global code for super_admin (no organization)
+        const lastUser = await this.constructor.findOne(
+          { organization: null },
+          { code: 1 }
+        )
+          .sort({ code: -1 })
+          .limit(1);
+
+        let nextNumber = 1;
+        if (lastUser && lastUser.code) {
+          const match = lastUser.code.match(/USR(\d+)/);
+          if (match) {
+            nextNumber = parseInt(match[1]) + 1;
+          }
+        }
+
+        this.code = `USR${String(nextNumber).padStart(4, '0')}`;
+      }
     } catch (error) {
       return next(error);
     }
@@ -120,8 +153,19 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Index for faster queries
-userSchema.index({ role: 1 });
-userSchema.index({ organization: 1 });
+// Indexes for faster queries
+// Note: email and mobile already have indexes via unique: true
+userSchema.index({ role: 1 });   // Filter by role
+userSchema.index({ organization: 1 }); // Filter by organization
+userSchema.index({ status: 1 }); // Filter by status
+
+// Compound unique index for organization-specific user codes
+userSchema.index({ organization: 1, code: 1 }, { unique: true, sparse: true });
+
+// Compound indexes for common query patterns
+userSchema.index({ organization: 1, status: 1 }); // Org + status filter
+userSchema.index({ organization: 1, role: 1 });   // Org + role filter
+userSchema.index({ status: 1, role: 1 });         // Status + role filter
+userSchema.index({ createdAt: -1 });              // Sort by creation date
 
 module.exports = mongoose.model('User', userSchema);

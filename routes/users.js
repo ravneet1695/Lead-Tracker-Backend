@@ -31,10 +31,10 @@ router.get('/', requirePermissions('users.read'), async (req, res) => {
         if (status) filter.status = status;
 
         const users = await User.find(filter)
-            .populate('groups')
-            .populate('organization')
-            .populate('role', 'name label')
-            .select('-password');
+            .populate('organization', 'name code')  // Only populate name and code
+            .populate('role', 'name label')         // Only populate name and label
+            .select('-password')
+            .lean();  // Return plain JS objects (20-30% faster)
 
         res.json({
             success: true,
@@ -51,14 +51,33 @@ router.get('/', requirePermissions('users.read'), async (req, res) => {
 });
 
 // @route   GET /api/users/next-code
-// @desc    Get next user code
+// @desc    Get next user code (organization-specific)
 // @access  Private (Admin)
 router.get('/next-code', requirePermissions('users.create'), async (req, res) => {
     try {
         // Use common helper to generate next code
         const prefix = process.env.USER_CODE_PREFIX || 'USR';
         const length = parseInt(process.env.USER_CODE_LENGTH) || 4;
-        const nextCode = await generateNextCode(User, prefix, length);
+
+        // Get organization from query param or logged-in user
+        let organizationId = req.query.organization;
+
+        // If no organization in query, use user's organization
+        if (!organizationId && req.user.organization) {
+            organizationId = req.user.organization;
+        }
+
+        // Build filter for organization-specific codes
+        // This ensures each organization has its own user code sequence
+        const filter = organizationId ? { organization: organizationId } : {};
+
+        console.log('🔍 Fetching next user code:');
+        console.log('  - Organization ID:', organizationId);
+        console.log('  - Filter:', JSON.stringify(filter));
+
+        const nextCode = await generateNextCode(User, prefix, length, filter);
+
+        console.log('  - Generated Code:', nextCode);
 
         res.json({
             success: true,
@@ -147,7 +166,11 @@ router.patch('/:id/status', requirePermissions('users.update'), async (req, res)
 // @access  Private (requires users.read permission)
 router.get('/:id', requirePermissions('users.read'), async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).populate('groups').select('-password');
+        const user = await User.findById(req.params.id)
+            .populate('groups')
+            .populate('organization', 'name code') // Populate organization with name and code
+            .populate('role', 'name label')        // Populate role with name and label
+            .select('-password');
 
         if (!user) {
             return res.status(404).json({

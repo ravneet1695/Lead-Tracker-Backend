@@ -16,7 +16,9 @@ const fs = require('fs');
 router.get('/', requirePermissions('organizations.read'), async (req, res) => {
     try {
         const organizations = await Organization.find({})
-            .sort({ createdAt: -1 });
+            .select('name code status email')  // Only return relevant fields
+            .sort({ createdAt: -1 })
+            .lean();  // Return plain JS objects (20-30% faster)
 
         res.json({
             success: true,
@@ -225,7 +227,7 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
             const field = Object.keys(error.keyPattern)[0];
             return res.status(400).json({
                 success: false,
-                message: `${field === 'email' ? 'User' : 'Organization'} with this ${field} already exists`
+                message: `User with this ${field} already exists`
             });
         }
 

@@ -35,12 +35,25 @@ router.get('/', protect, async (req, res) => {
         const { includeInactive, organization } = req.query;
         let filter = includeInactive === 'true' ? {} : { isActive: true };
 
-        // Apply organization filter using helper
-        filter = applyOrganizationFilter(req.user, filter, organization);
+        // If organization filter is specified, include both:
+        // 1. Roles for that specific organization
+        // 2. System roles (where organization is null)
+        if (organization) {
+            filter.$or = [
+                { organization: organization },  // Roles for this organization
+                { organization: null },          // System roles
+                { isSystem: true }               // System roles (alternative check)
+            ];
+        } else {
+            // Apply organization filter using helper for non-specific queries
+            filter = applyOrganizationFilter(req.user, filter, organization);
+        }
 
         const allRoles = await Role.find(filter)
-            .populate('organization', 'name')
-            .sort({ isSystem: -1, name: 1 }); // System roles first
+            .select('name label isSystem organization')  // Only return relevant fields
+            .populate('organization', 'name')             // Only populate org name
+            .sort({ isSystem: -1, name: 1 }) // System roles first
+            .lean();  // Return plain JS objects (20-30% faster)
 
         // Filter out super_admin and org_admin roles for non-super-admin users
         let roles = allRoles;

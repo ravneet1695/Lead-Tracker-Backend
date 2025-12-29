@@ -142,7 +142,12 @@ organizationSchema.methods.restore = function () {
 };
 
 // Indexes for faster queries
-organizationSchema.index({ status: 1 });
-organizationSchema.index({ deletedAt: 1 });
+// Note: code, email, and name already have indexes via unique: true
+organizationSchema.index({ status: 1 });     // Status filter
+organizationSchema.index({ deletedAt: 1 });  // Soft delete queries
+organizationSchema.index({ createdAt: -1 }); // Sort by creation date
+
+// Compound indexes
+organizationSchema.index({ status: 1, deletedAt: 1 }); // Active non-deleted orgs
 
 module.exports = mongoose.model('Organization', organizationSchema);

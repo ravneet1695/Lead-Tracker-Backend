@@ -7,7 +7,7 @@ const formFieldSchema = new mongoose.Schema({
     },
     fieldType: {
         type: String,
-        enum: ['text', 'number', 'date', 'dropdown', 'email', 'phone', 'multiContact', 'autoNumber', 'autoCalculate', 'textarea'],
+        enum: ['text', 'number', 'date', 'dropdown', 'email', 'phone', 'multiContact', 'autoNumber', 'autoCalculate', 'textarea', 'formArray'],
         required: true
     },
     alias: {
@@ -31,6 +31,66 @@ const formFieldSchema = new mongoose.Schema({
     order: {
         type: Number,
         default: 0
+    },
+    // FormArray specific fields
+    isArrayField: {
+        type: Boolean,
+        default: false
+    },
+    displayMode: {
+        type: String,
+        enum: ['cards', 'table'],
+        default: 'cards'
+    },
+    columnCount: {
+        type: Number,
+        min: 1,
+        max: 10,
+        default: 2
+    },
+    arrayFields: [{
+        fieldName: String,
+        fieldType: {
+            type: String,
+            enum: ['text', 'number', 'date', 'dropdown', 'email', 'phone', 'textarea']
+        },
+        alias: String,
+        mandatory: {
+            type: Boolean,
+            default: false
+        },
+        options: [String],
+        order: {
+            type: Number,
+            default: 0
+        },
+        columnIndex: {
+            type: Number,
+            default: 0
+        },
+        dependsOn: {
+            fieldName: String,
+            mappings: [{
+                when: String,
+                then: {
+                    label: String,
+                    options: [String],
+                    defaultValue: mongoose.Schema.Types.Mixed,
+                    show: {
+                        type: Boolean,
+                        default: true
+                    }
+                }
+            }]
+        }
+    }],
+    minInstances: {
+        type: Number,
+        default: 1
+    },
+    maxInstances: {
+        type: Number,
+        default: 10
     }
 }, { _id: false });
 
