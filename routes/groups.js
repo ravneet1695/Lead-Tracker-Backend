@@ -71,14 +71,29 @@ router.get('/', requirePermissions('groups.read'), async (req, res) => {
 // @access  Private (requires groups.create permission)
 router.get('/next-code', requirePermissions('groups.create'), async (req, res) => {
     try {
-        // Get organization from query params (for Super Admin) or user (for Org Admin)
-        let organizationId = req.query.organization || req.user.organization;
+        // For Super Admin, organization MUST be provided in query params
+        // For Org Admin, use their organization
+        const isSuperAdminUser = isSuperAdmin(req.user);
+        let organizationId;
 
-        if (!organizationId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Organization is required to generate group code'
-            });
+        if (isSuperAdminUser) {
+            // Super Admin must explicitly provide organization
+            organizationId = req.query.organization;
+            if (!organizationId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Super Admin must select an organization first to generate group code'
+                });
+            }
+        } else {
+            // Org Admin uses their own organization
+            organizationId = req.user.organization;
+            if (!organizationId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Organization is required to generate group code'
+                });
+            }
         }
 
         // Use helper function to generate next code
@@ -141,16 +156,30 @@ router.get('/:id', requirePermissions('groups.read'), async (req, res) => {
 // @access  Private (requires groups.create permission)
 router.post('/', requirePermissions('groups.create'), createAuditLog('CREATE', 'Group'), async (req, res) => {
     try {
-        const { code, name, description, users, managers, isActive } = req.body;
+        const { code, name, description, organization, users, managers, isActive } = req.body;
 
-        // Auto-assign organization from user
-        const organizationId = req.user.organization;
+        // Determine organization ID based on user role
+        let organizationId;
+        const isSuperAdminUser = isSuperAdmin(req.user);
 
-        if (!organizationId) {
-            return res.status(400).json({
-                success: false,
-                message: 'User organization not found'
-            });
+        if (isSuperAdminUser) {
+            // Super Admin must provide organization in request body
+            organizationId = organization;
+            if (!organizationId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Organization is required for group creation'
+                });
+            }
+        } else {
+            // Org Admin uses their own organization
+            organizationId = req.user.organization;
+            if (!organizationId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User organization not found'
+                });
+            }
         }
 
         // Validate members using helper function

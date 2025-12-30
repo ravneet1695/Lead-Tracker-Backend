@@ -4,7 +4,6 @@ const groupSchema = new mongoose.Schema({
     code: {
         type: String,
         required: [true, 'Group code is required'],
-        unique: true,
         trim: true,
         uppercase: true
     },
@@ -48,6 +47,9 @@ const groupSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+// Ensure unique group code within organization
+groupSchema.index({ code: 1, organization: 1 }, { unique: true });
 
 // Ensure unique group name within organization
 groupSchema.index({ name: 1, organization: 1 }, { unique: true });

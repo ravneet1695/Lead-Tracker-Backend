@@ -82,29 +82,43 @@ function verifyGroupAccess(user, group) {
  * Generate next group code for an organization
  * @param {String} organizationId - Organization ID
  * @param {Object} GroupModel - Group model
- * @returns {String} - Next group code (e.g., GRP0001)
+ * @returns {String} - Next group code (e.g., GMONEY-GRP001)
  */
 async function generateNextGroupCode(organizationId, GroupModel) {
-    const prefix = process.env.GROUP_CODE_PREFIX || 'GRP';
-    const codeLength = parseInt(process.env.GROUP_CODE_LENGTH) || 4;
+    const Organization = require('../models/Organization');
+
+    // Get organization to fetch its code
+    const organization = await Organization.findById(organizationId).select('code');
+    if (!organization || !organization.code) {
+        throw new Error('Organization not found or organization code is missing');
+    }
+
+    const orgCode = organization.code;
+    const groupPrefix = process.env.GROUP_CODE_PREFIX || 'GRP';
+    const codeLength = parseInt(process.env.GROUP_CODE_LENGTH) || 3;
 
     // Find the latest group code for this organization
-    const lastGroup = await GroupModel.findOne({ organization: organizationId })
+    // Pattern: ORG_CODE-GRP###
+    const codePattern = `${orgCode}-${groupPrefix}`;
+    const lastGroup = await GroupModel.findOne({
+        organization: organizationId,
+        code: { $regex: `^${codePattern}` }
+    })
         .sort({ code: -1 })
         .select('code');
 
     let nextNumber = 1;
     if (lastGroup && lastGroup.code) {
-        // Extract number from code (e.g., "GRP0001" -> 1)
-        const regex = new RegExp(`${prefix}(\\d+)`);
+        // Extract number from code (e.g., "GMONEY-GRP001" -> 1)
+        const regex = new RegExp(`${codePattern}(\\d+)`);
         const match = lastGroup.code.match(regex);
         if (match) {
             nextNumber = parseInt(match[1]) + 1;
         }
     }
 
-    // Format code with leading zeros (GRP0001, GRP0002, etc.)
-    const nextCode = `${prefix}${nextNumber.toString().padStart(codeLength, '0')}`;
+    // Format code with leading zeros (GMONEY-GRP001, GMONEY-GRP002, etc.)
+    const nextCode = `${codePattern}${nextNumber.toString().padStart(codeLength, '0')}`;
     return nextCode;
 }
 

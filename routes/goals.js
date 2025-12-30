@@ -17,7 +17,10 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
         if (req.user.role.name === 'org_admin' && req.user.organization) {
             filter.organization = req.user.organization;
         }
-        // If user is super_admin, they can see all goals (no filter)
+        // If user is super_admin, they can see all goals or filter by organization
+        else if (req.user.role.name === 'super_admin' && req.query.organization && req.query.organization !== 'all') {
+            filter.organization = req.query.organization;
+        }
 
         // Apply status filter if provided
         if (req.query.status) {

@@ -100,13 +100,6 @@ const goalSchema = new mongoose.Schema({
         required: [true, 'Goal title is required'],
         trim: true
     },
-    description: {
-        type: String,
-        trim: true
-    },
-    target: {
-        type: Number
-    },
     timeline: {
         startDate: Date,
         endDate: Date
@@ -125,11 +118,6 @@ const goalSchema = new mongoose.Schema({
     statusOptions: [{
         type: String
     }],
-    pointsConfig: {
-        entryCreation: { type: Number, default: 10 },
-        statusUpdate: { type: Number, default: 5 },
-        fieldCompletion: { type: Number, default: 2 }
-    },
     completionStatus: {
         type: String,
         default: 'Approved',
@@ -142,7 +130,7 @@ const goalSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['active', 'inactive', 'completed'],
+        enum: ['active', 'inactive'],
         default: 'active'
     },
     completedAt: {
