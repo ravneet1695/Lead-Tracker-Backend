@@ -33,34 +33,60 @@ router.get('/', protect, async (req, res) => {
         }
 
         const { includeInactive, organization } = req.query;
-        let filter = includeInactive === 'true' ? {} : { isActive: true };
 
-        // If organization filter is specified, include both:
-        // 1. Roles for that specific organization
-        // 2. System roles (where organization is null)
-        if (organization) {
-            filter.$or = [
-                { organization: organization },  // Roles for this organization
-                { organization: null },          // System roles
-                { isSystem: true }               // System roles (alternative check)
-            ];
-        } else {
-            // Apply organization filter using helper for non-specific queries
-            filter = applyOrganizationFilter(req.user, filter, organization);
+        // Determine if user is Super Admin
+        const userIsSuperAdmin = isSuperAdmin(req.user);
+
+        // Build base filter for active/inactive roles
+        let filter = {};
+        if (includeInactive !== 'true') {
+            filter.isActive = true;
         }
 
+        // Apply organization-based filtering
+        if (userIsSuperAdmin) {
+            // Super Admin: Can filter by organization or see all
+            if (organization && organization !== 'all') {
+                // Show system roles + custom roles for selected organization
+                filter.$or = [
+                    { isSystem: true },                    // All system roles
+                    { organization: organization, isSystem: false }  // Custom roles for selected org
+                ];
+            } else {
+                // Show all roles (system + all custom roles from all orgs)
+                // No additional filter needed - will return everything
+            }
+        } else {
+            // Org Admin: Only see their organization's roles
+            const userOrgId = req.user.organization;
+
+            if (!userOrgId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User organization not found'
+                });
+            }
+
+            // Show system roles + custom roles for their organization only
+            filter.$or = [
+                { isSystem: true },                    // All system roles
+                { organization: userOrgId, isSystem: false }  // Custom roles for their org
+            ];
+        }
+
+        // Fetch roles with all necessary fields
         const allRoles = await Role.find(filter)
-            .select('name label isSystem organization')  // Only return relevant fields
-            .populate('organization', 'name')             // Only populate org name
-            .sort({ isSystem: -1, name: 1 }) // System roles first
-            .lean();  // Return plain JS objects (20-30% faster)
+            .select('name label description isSystem isActive organization permissions')
+            .populate('organization', 'name code')
+            .sort({ isSystem: -1, name: 1 }) // System roles first, then alphabetically
+            .lean();
 
-        // Filter out super_admin and org_admin roles for non-super-admin users
+        // For non-super-admin users, filter out super_admin and org_admin roles
         let roles = allRoles;
-        const superAdminRole = getRoleName('super_admin');
-        const orgAdminRole = getRoleName('org_admin');
+        if (!userIsSuperAdmin) {
+            const superAdminRole = getRoleName('super_admin');
+            const orgAdminRole = getRoleName('org_admin');
 
-        if (!isSuperAdmin(req.user)) {
             roles = allRoles.filter(role =>
                 role.name !== superAdminRole && role.name !== orgAdminRole
             );
