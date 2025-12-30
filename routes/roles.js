@@ -138,17 +138,7 @@ router.post('/', requirePermissions('roles.create'), createAuditLog('CREATE', 'R
             });
         }
 
-        // Check if role with same name exists globally
-        const existingRole = await Role.findOne({ name: name.toLowerCase() });
-
-        if (existingRole) {
-            return res.status(400).json({
-                success: false,
-                message: 'Role with this name already exists'
-            });
-        }
-
-        // Determine organization for the role
+        // Determine organization for the role first
         let organizationId = null;
         if (!isSystem) {
             // Auto-assign organization based on user role
@@ -159,6 +149,32 @@ router.post('/', requirePermissions('roles.create'), createAuditLog('CREATE', 'R
                 // Org admin can only create roles for their own organization
                 organizationId = req.user.organization;
             }
+        }
+
+        // Check if role with same name exists within the same scope
+        let duplicateQuery;
+        if (isSystem) {
+            // For system roles, check globally
+            duplicateQuery = { name: name.toLowerCase(), isSystem: true };
+        } else {
+            // For custom roles, check within the organization
+            duplicateQuery = {
+                name: name.toLowerCase(),
+                organization: organizationId,
+                isSystem: false
+            };
+        }
+
+        const existingRole = await Role.findOne(duplicateQuery);
+
+        if (existingRole) {
+            const errorMessage = isSystem
+                ? 'A system role with this name already exists'
+                : 'A role with this name already exists in this organization';
+            return res.status(400).json({
+                success: false,
+                message: errorMessage
+            });
         }
 
         const role = await Role.create({
