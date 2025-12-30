@@ -55,10 +55,6 @@ router.get('/', requirePermissions('users.read'), async (req, res) => {
 // @access  Private (Admin)
 router.get('/next-code', requirePermissions('users.create'), async (req, res) => {
     try {
-        // Use common helper to generate next code
-        const prefix = process.env.USER_CODE_PREFIX || 'USR';
-        const length = parseInt(process.env.USER_CODE_LENGTH) || 4;
-
         // Get organization from query param or logged-in user
         let organizationId = req.query.organization;
 
@@ -67,15 +63,60 @@ router.get('/next-code', requirePermissions('users.create'), async (req, res) =>
             organizationId = req.user.organization;
         }
 
-        // Build filter for organization-specific codes
-        // This ensures each organization has its own user code sequence
-        const filter = organizationId ? { organization: organizationId } : {};
-
         console.log('🔍 Fetching next user code:');
         console.log('  - Organization ID:', organizationId);
-        console.log('  - Filter:', JSON.stringify(filter));
 
-        const nextCode = await generateNextCode(User, prefix, length, filter);
+        let nextCode;
+
+        if (organizationId) {
+            // Organization-specific code generation
+            const Organization = require('../models/Organization');
+            const org = await Organization.findById(organizationId);
+
+            if (!org) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Organization not found'
+                });
+            }
+
+            // Find the last user in this organization
+            const lastUser = await User.findOne(
+                { organization: organizationId },
+                { code: 1 }
+            )
+                .sort({ code: -1 })
+                .limit(1);
+
+            let nextNumber = 1;
+            if (lastUser && lastUser.code) {
+                // Extract number from format: ORG-XXX-USRXXXX
+                const match = lastUser.code.match(/USR(\d+)$/);
+                if (match) {
+                    nextNumber = parseInt(match[1]) + 1;
+                }
+            }
+
+            nextCode = `${org.code}-USR${String(nextNumber).padStart(4, '0')}`;
+        } else {
+            // Global code for super_admin (no organization)
+            const lastUser = await User.findOne(
+                { organization: null },
+                { code: 1 }
+            )
+                .sort({ code: -1 })
+                .limit(1);
+
+            let nextNumber = 1;
+            if (lastUser && lastUser.code) {
+                const match = lastUser.code.match(/USR(\d+)/);
+                if (match) {
+                    nextNumber = parseInt(match[1]) + 1;
+                }
+            }
+
+            nextCode = `USR${String(nextNumber).padStart(4, '0')}`;
+        }
 
         console.log('  - Generated Code:', nextCode);
 
@@ -206,6 +247,21 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
                 success: false,
                 message: 'User with this email or mobile already exists'
             });
+        }
+
+        // Validate role assignment permissions
+        // Only Super Admin can create users with org_admin or super_admin roles
+        if (role) {
+            const selectedRole = await Role.findById(role);
+            if (selectedRole && (selectedRole.name === 'org_admin' || selectedRole.name === 'super_admin')) {
+                // Check if current user is Super Admin
+                if (!isSuperAdmin(req.user)) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Only Super Admin can create users with Admin roles'
+                    });
+                }
+            }
         }
 
         // Handle profile image

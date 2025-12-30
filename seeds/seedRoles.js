@@ -35,7 +35,11 @@ const defaultRoles = [
             'leads.delete',
             'reports.read',
             'dashboard.read',
-            'audit-logs.read'
+            'audit-logs.read',
+            'roles.create',
+            'roles.read',
+            'roles.update',
+            'roles.delete'
         ],
         isSystem: true,
         isActive: true

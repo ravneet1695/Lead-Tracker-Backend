@@ -16,7 +16,8 @@ const fs = require('fs');
 router.get('/', requirePermissions('organizations.read'), async (req, res) => {
     try {
         const organizations = await Organization.find({})
-            .select('name code status email')  // Only return relevant fields
+            .populate('admin', 'name email mobile')  // Populate admin user details
+            .select('name code status email alias admin')  // Include admin in selection
             .sort({ createdAt: -1 })
             .lean();  // Return plain JS objects (20-30% faster)
 
