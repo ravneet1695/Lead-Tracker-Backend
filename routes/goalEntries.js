@@ -10,25 +10,25 @@ const { requireAuth } = require('../middleware/auth');
 // @access  Private
 router.get('/', requireAuth, async (req, res) => {
     try {
-        const { goal, group, status } = req.query;
+        const { goal, group, status } = req.query; // 'group' query param can still filter by specific group
         let filter = {};
 
         // Role-based filtering
         if (req.user.role === 'sales') {
             filter.user = req.user.id;
         } else if (req.user.role === 'manager') {
-            filter.group = { $in: req.user.groups };
+            filter.groups = { $in: req.user.groups };
         }
         // Admin sees all
 
         if (goal) filter.goal = goal;
-        if (group) filter.group = group;
+        if (group) filter.groups = group;
         if (status) filter.status = status;
 
         const entries = await GoalEntry.find(filter)
             .populate('goal', 'title')
             .populate('user', 'name email')
-            .populate('group', 'name')
+            .populate('groups', 'name')
             .sort('-updatedAt');
 
         res.json({
@@ -109,7 +109,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 // @access  Private
 router.post('/', requireAuth, async (req, res) => {
     try {
-        const { goal, group, data, status, contacts, remarks } = req.body;
+        const { goal, groups, data, status, contacts, remarks } = req.body;
 
         // Verify goal exists and populate groups
         const goalDoc = await Goal.findById(goal).populate('groups');
@@ -134,11 +134,22 @@ router.post('/', requireAuth, async (req, res) => {
             });
         }
 
-        // Validate group is one of the goal's groups
-        if (!goalGroupIds.includes(group)) {
+        // Validate selected groups
+        const selectedGroups = Array.isArray(groups) ? groups : (groups ? [groups] : []);
+
+        if (selectedGroups.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Selected group is not assigned to this goal'
+                message: 'Please select at least one group'
+            });
+        }
+
+        // Validate selected groups are assigned to this goal
+        const invalidGroups = selectedGroups.filter(g => !goalGroupIds.includes(g));
+        if (invalidGroups.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'One or more selected groups are not assigned to this goal'
             });
         }
 
@@ -186,7 +197,7 @@ router.post('/', requireAuth, async (req, res) => {
         const entry = await GoalEntry.create({
             goal,
             user: req.user.id,
-            group,
+            groups: selectedGroups,
             data,
             status: status || goalDoc.statusOptions?.[0] || 'New',
             contacts,
@@ -258,7 +269,7 @@ router.post('/', requireAuth, async (req, res) => {
         const populatedEntry = await GoalEntry.findById(entry._id)
             .populate('goal', 'title')
             .populate('user', 'name email')
-            .populate('group', 'name');
+            .populate('groups', 'name');
 
         res.status(201).json({
             success: true,

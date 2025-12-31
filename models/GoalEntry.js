@@ -30,11 +30,10 @@ const goalEntrySchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    group: {
+    groups: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Group',
-        required: true
-    },
+        ref: 'Group'
+    }],
     data: {
         type: mongoose.Schema.Types.Mixed,
         default: {}
@@ -73,7 +72,7 @@ goalEntrySchema.pre('save', function (next) {
 
 // Indexes for faster queries
 goalEntrySchema.index({ goal: 1, user: 1 });
-goalEntrySchema.index({ group: 1 });
+goalEntrySchema.index({ groups: 1 });
 goalEntrySchema.index({ status: 1 });
 
 module.exports = mongoose.model('GoalEntry', goalEntrySchema);
