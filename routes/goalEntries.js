@@ -160,6 +160,29 @@ router.post('/', requireAuth, async (req, res) => {
             }
         }
 
+        // Handle auto number fields
+        if (goalDoc.formSchema && goalDoc.formSchema.length > 0) {
+            for (const field of goalDoc.formSchema) {
+                if (field.fieldType === 'autoNumber') {
+                    // Find the highest auto number for this field in this goal
+                    const existingEntries = await GoalEntry.find({ goal: goalDoc._id })
+                        .select(`data.${field.fieldName}`)
+                        .sort({ [`data.${field.fieldName}`]: -1 })
+                        .limit(1);
+
+                    let nextNumber = 1;
+                    if (existingEntries.length > 0 && existingEntries[0].data && existingEntries[0].data[field.fieldName]) {
+                        const currentMax = parseInt(existingEntries[0].data[field.fieldName]);
+                        nextNumber = isNaN(currentMax) ? 1 : currentMax + 1;
+                    }
+
+                    // Set the auto number in the data
+                    if (!data) data = {};
+                    data[field.fieldName] = nextNumber;
+                }
+            }
+        }
+
         const entry = await GoalEntry.create({
             goal,
             user: req.user.id,
