@@ -14,15 +14,53 @@ router.get('/', requireAuth, async (req, res) => {
         let filter = {};
 
         // Role-based filtering
-        if (req.user.role === 'sales') {
+        const userRole = req.user.role.name;
+
+        if (userRole === 'super_admin') {
+            // Super Admin sees all
+        } else if (userRole === 'org_admin') {
+            // Org Admin sees leads for their organization's goals
+            // Since we don't store org on entry directly, we might rely on the fact they can only see goals for their org.
+            // However, to be safe, we should filter by goals that belong to their org.
+            // But simpler first step: Org Admin usually sees all leads. 
+            // Let's filter by the goals they have access to? 
+            // Actually, if we just don't filter 'user', they see all leads for the keys they request (likely filtered by goal).
+            // But to prevent cross-org data leak if they query global:
+            if (req.user.organization) {
+                // Find all goals for this org to filter entries
+                const orgGoals = await Goal.find({ organization: req.user.organization }).select('_id');
+                const orgGoalIds = orgGoals.map(g => g._id);
+                filter.goal = { $in: orgGoalIds };
+            }
+        } else {
+            // Regular User (e.g. sales, manager, etc.)
+            // STRICT PRIVACY: User sees ONLY their own leads
             filter.user = req.user.id;
-        } else if (req.user.role === 'manager') {
-            filter.groups = { $in: req.user.groups };
         }
         // Admin sees all
 
-        if (goal) filter.goal = goal;
-        if (group) filter.groups = group;
+        // Apply user filters safely
+        if (goal) {
+            // If security filter exists (e.g. org_admin restricted to org goals)
+            if (filter.goal && filter.goal.$in) {
+                // Verify requested goal is allowed
+                const allowedIds = filter.goal.$in.map(id => id.toString());
+                if (allowedIds.includes(goal)) {
+                    filter.goal = goal;
+                } else {
+                    // Requested goal is not allowed - return empty
+                    return res.json({ success: true, count: 0, entries: [] });
+                }
+            } else {
+                filter.goal = goal;
+            }
+        }
+
+        if (group) {
+            // Similar logic could apply if we restricted groups, but currently groups are filtered by goal context
+            filter.groups = group;
+        }
+
         if (status) filter.status = status;
 
         const entries = await GoalEntry.find(filter)

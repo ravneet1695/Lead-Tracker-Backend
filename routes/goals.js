@@ -13,13 +13,28 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
         // Build query filter
         const filter = {};
 
-        // If user is org_admin, only show goals from their organization
+        // Role-based filtering
         if (req.user.role.name === 'org_admin' && req.user.organization) {
+            // Org Admin sees goals for their organization
             filter.organization = req.user.organization;
-        }
-        // If user is super_admin, they can see all goals or filter by organization
-        else if (req.user.role.name === 'super_admin' && req.query.organization && req.query.organization !== 'all') {
-            filter.organization = req.query.organization;
+        } else if (req.user.role.name === 'super_admin') {
+            // Super Admin sees all, or filters by specific organization
+            if (req.query.organization && req.query.organization !== 'all') {
+                filter.organization = req.query.organization;
+            }
+        } else {
+            // Regular users (not admin) only see goals assigned to their groups
+            // Ensure they have groups assigned
+            if (req.user.groups && req.user.groups.length > 0) {
+                filter.groups = { $in: req.user.groups };
+            } else {
+                // If user has no groups, they see no goals
+                return res.json({
+                    success: true,
+                    count: 0,
+                    goals: []
+                });
+            }
         }
 
         // Apply status filter if provided
@@ -117,12 +132,28 @@ router.get('/:id', requirePermissions('goals.read'), async (req, res) => {
             });
         }
 
-        // Check if org_admin is accessing goal from their organization
-        if (req.user.role.name === 'org_admin' && req.user.organization) {
+        // Access Control
+        const userRole = req.user.role.name;
+
+        if (userRole === 'org_admin' && req.user.organization) {
+            // Org Admin: Must belong to same organization
             if (goal.organization._id.toString() !== req.user.organization.toString()) {
                 return res.status(403).json({
                     success: false,
                     message: 'Access denied: Goal belongs to different organization'
+                });
+            }
+        } else if (userRole !== 'super_admin') {
+            // Regular User: Must belong to one of the goal's groups
+            const userGroupIds = req.user.groups.map(g => g.toString());
+            const goalGroupIds = goal.groups.map(g => g._id.toString());
+
+            const hasAccess = userGroupIds.some(id => goalGroupIds.includes(id));
+
+            if (!hasAccess) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access denied: You are not assigned to this goal'
                 });
             }
         }
