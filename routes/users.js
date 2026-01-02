@@ -238,7 +238,7 @@ router.get('/:id', requirePermissions('users.read'), async (req, res) => {
 // @access  Private (requires users.create permission)
 router.post('/', requirePermissions('users.create'), upload.single('profileImage'), createAuditLog('CREATE', 'User'), async (req, res) => {
     try {
-        const { code, name, email, mobile, password, role, organization, status } = req.body;
+        const { code, name, email, mobile, role, organization, status } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ $or: [{ email }, { mobile }] });
@@ -273,7 +273,7 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
             name,
             email,
             mobile,
-            password,
+            password: mobile.toString(), // Default password is mobile number
             role,
             organization,
             profileImage,
@@ -301,7 +301,7 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
 // @access  Private (requires users.update permission)
 router.put('/:id', requirePermissions('users.update'), upload.single('profileImage'), createAuditLog('UPDATE', 'User'), async (req, res) => {
     try {
-        const { name, email, mobile, password, role, organization, status } = req.body;
+        const { name, email, mobile, role, organization, status } = req.body;
         const user = await User.findById(req.params.id);
 
         if (!user) {
@@ -315,7 +315,6 @@ router.put('/:id', requirePermissions('users.update'), upload.single('profileIma
         if (name) user.name = name;
         if (email) user.email = email;
         if (mobile) user.mobile = mobile;
-        if (password) user.password = password;
         if (role) user.role = role;
         if (organization) user.organization = organization;
         if (status) user.status = status; // Added status update
