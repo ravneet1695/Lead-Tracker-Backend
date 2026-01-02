@@ -7,6 +7,14 @@ const { createAuditLog } = require('../middleware/auditLog');
 // Get master configuration for organization
 router.get('/', protect, async (req, res) => {
     try {
+        // If user has no organization (e.g. Super Admin), return null config
+        if (!req.user.organization) {
+            return res.status(200).json({
+                success: true,
+                config: null
+            });
+        }
+
         let config = await MasterConfig.findOne({ organization: req.user.organization });
 
         // If no config exists, create default one
@@ -47,6 +55,13 @@ router.get('/', protect, async (req, res) => {
 // Update master configuration
 router.put('/', requirePermissions('master-config.update'), createAuditLog('UPDATE', 'MasterConfig'), async (req, res) => {
     try {
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: 'No organization linked to this user'
+            });
+        }
+
         const {
             leadSources,
             leadStatuses,
@@ -98,6 +113,13 @@ router.put('/', requirePermissions('master-config.update'), createAuditLog('UPDA
 // Seed default master data
 router.post('/seed', requirePermissions('master-config.create'), createAuditLog('CREATE', 'MasterConfig'), async (req, res) => {
     try {
+        if (!req.user.organization) {
+            return res.status(400).json({
+                success: false,
+                message: 'No organization linked to this user'
+            });
+        }
+
         // Check if config already exists
         let config = await MasterConfig.findOne({ organization: req.user.organization });
 
