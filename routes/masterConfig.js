@@ -25,6 +25,7 @@ router.get('/', protect, async (req, res) => {
                 leadStatuses: [],
                 productCategories: [],
                 customFields: [],
+                departments: [],
                 tags: [],
                 settings: {
                     businessHours: {
@@ -67,6 +68,7 @@ router.put('/', requirePermissions('master-config.update'), createAuditLog('UPDA
             leadStatuses,
             productCategories,
             customFields,
+            departments,
             tags,
             settings
         } = req.body;
@@ -90,6 +92,7 @@ router.put('/', requirePermissions('master-config.update'), createAuditLog('UPDA
             if (leadStatuses !== undefined) config.leadStatuses = leadStatuses;
             if (productCategories !== undefined) config.productCategories = productCategories;
             if (customFields !== undefined) config.customFields = customFields;
+            if (departments !== undefined) config.departments = departments;
             if (tags !== undefined) config.tags = tags;
             if (settings !== undefined) config.settings = { ...config.settings, ...settings };
 
@@ -159,6 +162,15 @@ router.post('/seed', requirePermissions('master-config.create'), createAuditLog(
                 'Training'
             ],
             customFields: [],
+            departments: [
+                'Sales',
+                'Marketing',
+                'Operations',
+                'Finance',
+                'Human Resources',
+                'IT Support',
+                'Customer Success'
+            ],
             tags: [
                 'Hot Lead',
                 'VIP',

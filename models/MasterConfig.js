@@ -55,6 +55,10 @@ const masterConfigSchema = new mongoose.Schema({
         trim: true
     }],
     customFields: [customFieldSchema],
+    departments: [{
+        type: String,
+        trim: true
+    }],
     tags: [{
         type: String,
         trim: true
