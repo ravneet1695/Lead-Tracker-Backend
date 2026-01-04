@@ -3,7 +3,6 @@ const router = express.Router();
 const Organization = require('../models/Organization');
 const User = require('../models/User');
 const Role = require('../models/Role');
-const MasterConfig = require('../models/MasterConfig');
 const { requirePermissions } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
 const { generateNextCode, getRoleName } = require('../helpers/commonHelpers');
@@ -93,17 +92,9 @@ router.get('/:id', requirePermissions('organizations.read'), async (req, res) =>
             });
         }
 
-        // Fetch departments from MasterConfig
-        const config = await MasterConfig.findOne({ organization: req.params.id });
-        console.log(`Config for org ${req.params.id}:`, config ? 'Found' : 'Not Found');
-        if (config) console.log('Departments in config:', config.departments);
-
-        const orgObj = organization.toObject();
-        orgObj.departments = config ? config.departments : [];
-
         res.json({
             success: true,
-            organization: orgObj
+            organization
         });
     } catch (error) {
         console.error('Error fetching organization:', error);
@@ -200,28 +191,16 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
 
             // Update organization with admin reference
             organization.admin = user._id;
+            organization.departments = (departments && departments.length > 0) ? departments : [
+                'Sales',
+                'Marketing',
+                'Operations',
+                'Finance',
+                'Human Resources',
+                'IT Support',
+                'Customer Success'
+            ];
             await organization.save();
-
-            // Create MasterConfig with departments
-            await MasterConfig.create({
-                organization: organization._id,
-                departments: (departments && departments.length > 0) ? departments : [
-                    'Sales',
-                    'Marketing',
-                    'Operations',
-                    'Finance',
-                    'Human Resources',
-                    'IT Support',
-                    'Customer Success'
-                ],
-                leadSources: ['Website', 'Referral', 'Social Media', 'Cold Call'],
-                leadStatuses: [
-                    { name: 'New', color: '#3b82f6', order: 1, isDefault: true },
-                    { name: 'Contacted', color: '#8b5cf6', order: 2, isDefault: false },
-                    { name: 'Won', color: '#10b981', order: 3, isDefault: false },
-                    { name: 'Lost', color: '#6b7280', order: 4, isDefault: false }
-                ]
-            });
 
             res.status(201).json({
                 success: true,
@@ -316,20 +295,11 @@ router.put('/:id', requirePermissions('organizations.update'), createAuditLog('U
                 logo,
                 description,
                 status,
+                departments,
                 updatedAt: Date.now()
             },
             { new: true, runValidators: true }
         );
-
-        // Update departments in MasterConfig
-        if (departments !== undefined) {
-            console.log(`Updating departments for org ${req.params.id}:`, departments);
-            await MasterConfig.findOneAndUpdate(
-                { organization: req.params.id },
-                { $set: { departments } },
-                { upsert: true, new: true }
-            );
-        }
 
         res.json({
             success: true,

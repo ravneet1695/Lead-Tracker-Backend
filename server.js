@@ -36,7 +36,6 @@ app.use('/api/organizations', require('./routes/organizations'));
 app.use('/api/roles', require('./routes/roles'));
 app.use('/api/locations', require('./routes/locations'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
-app.use('/api/master-config', require('./routes/masterConfig'));
 
 // Health check
 app.get('/api/health', (req, res) => {
