@@ -71,6 +71,10 @@ const organizationSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
+    departments: [{
+        type: String,
+        trim: true
+    }],
     status: {
         type: String,
         enum: ['active', 'inactive'],
