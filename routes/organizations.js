@@ -110,7 +110,7 @@ router.get('/:id', requirePermissions('organizations.read'), async (req, res) =>
 // @access  Private (Super Admin only)
 router.post('/', requirePermissions('organizations.create'), createAuditLog('CREATE', 'Organization'), async (req, res) => {
     try {
-        const { name, email, website, alias, phone, address, logo, description, status, adminUser, departments } = req.body;
+        const { name, email, website, alias, address, logo, description, status, adminUser, departments } = req.body;
 
         // Validate required fields
         if (!name || !email) {
@@ -158,7 +158,6 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
             email,
             website,
             alias,
-            phone,
             address,
             logo,
             description,
@@ -253,7 +252,7 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
 // @access  Private (Super Admin only)
 router.put('/:id', requirePermissions('organizations.update'), createAuditLog('UPDATE', 'Organization'), async (req, res) => {
     try {
-        const { name, email, website, alias, phone, address, logo, description, status, departments } = req.body;
+        const { name, email, website, alias, address, logo, description, status, departments } = req.body;
 
         let organization = await Organization.findOne({
             _id: req.params.id,
@@ -290,7 +289,6 @@ router.put('/:id', requirePermissions('organizations.update'), createAuditLog('U
                 email,
                 website,
                 alias,
-                phone,
                 address,
                 logo,
                 description,

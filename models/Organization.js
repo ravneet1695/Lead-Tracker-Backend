@@ -32,10 +32,6 @@ const organizationSchema = new mongoose.Schema({
         trim: true,
         uppercase: true
     },
-    phone: {
-        type: String,
-        trim: true
-    },
     address: {
         street: {
             type: String,
