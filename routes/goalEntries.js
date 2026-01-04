@@ -91,7 +91,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         const entry = await GoalEntry.findById(req.params.id)
             .populate('goal')
             .populate('user', 'name email')
-            .populate('group', 'name');
+            .populate('groups', 'name');
 
         if (!entry) {
             return res.status(404).json({

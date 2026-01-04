@@ -7,15 +7,22 @@ const { createAuditLog } = require('../middleware/auditLog');
 // Get master configuration for organization
 router.get('/', protect, async (req, res) => {
     try {
-        // If user has no organization (e.g. Super Admin), return null config
-        if (!req.user.organization) {
+        let organizationId = req.user.organization;
+
+        // If Super Admin, allow specifying organization via query param
+        if (req.user.role.name === 'super_admin' && req.query.organization) {
+            organizationId = req.query.organization;
+        }
+
+        // If no organization found, return null config
+        if (!organizationId) {
             return res.status(200).json({
                 success: true,
                 config: null
             });
         }
 
-        let config = await MasterConfig.findOne({ organization: req.user.organization });
+        let config = await MasterConfig.findOne({ organization: organizationId });
 
         // If no config exists, create default one
         if (!config) {
