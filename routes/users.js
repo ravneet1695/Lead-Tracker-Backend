@@ -232,7 +232,15 @@ router.get('/:id', requirePermissions('users.read'), async (req, res) => {
 // @access  Private (requires users.create permission)
 router.post('/', requirePermissions('users.create'), upload.single('profileImage'), createAuditLog('CREATE', 'User'), async (req, res) => {
     try {
-        const { code, name, email, mobile, role, organization, status } = req.body;
+        const { code, name, email, mobile, role, organization, status, department } = req.body;
+
+        // Validate required fields
+        if (!name || !email || !mobile || !role || !department) {
+            return res.status(400).json({
+                success: false,
+                message: 'All mandatory fields are required (name, email, mobile, role, department)'
+            });
+        }
 
         // Check if user already exists
         const existingUser = await User.findOne({ $or: [{ email }, { mobile }] });
@@ -258,8 +266,26 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
             }
         }
 
-        // Handle profile image
-        const profileImage = req.file ? `/uploads/profiles/${req.file.filename}` : null;
+        // Determine default password
+        let userPassword = req.body.password;
+        if (organization) {
+            const Organization = require('../models/Organization');
+            const org = await Organization.findById(organization);
+            if (!org || !org.defaultPassword) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Organization default password not set'
+                });
+            }
+            userPassword = org.defaultPassword;
+        }
+
+        if (!userPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password is required (organization default password missing or no password provided)'
+            });
+        }
 
         // Create user
         const user = await User.create({
@@ -267,11 +293,12 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
             name,
             email,
             mobile,
-            password: mobile.toString(), // Default password is mobile number
+            password: userPassword,
             role,
             organization,
+            department,
             profileImage,
-            status
+            status: status || 'active'
         });
 
         // Create gamification record
@@ -295,7 +322,7 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
 // @access  Private (requires users.update permission)
 router.put('/:id', requirePermissions('users.update'), upload.single('profileImage'), createAuditLog('UPDATE', 'User'), async (req, res) => {
     try {
-        const { name, email, mobile, role, organization, status } = req.body;
+        const { name, email, mobile, role, organization, status, department } = req.body;
         const user = await User.findById(req.params.id);
 
         if (!user) {
@@ -311,7 +338,8 @@ router.put('/:id', requirePermissions('users.update'), upload.single('profileIma
         if (mobile) user.mobile = mobile;
         if (role) user.role = role;
         if (organization) user.organization = organization;
-        if (status) user.status = status; // Added status update
+        if (status) user.status = status;
+        if (department) user.department = department;
         if (req.file) user.profileImage = `/uploads/profiles/${req.file.filename}`;
 
         await user.save(); // Save the updated user

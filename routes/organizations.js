@@ -110,7 +110,7 @@ router.get('/:id', requirePermissions('organizations.read'), async (req, res) =>
 // @access  Private (Super Admin only)
 router.post('/', requirePermissions('organizations.create'), createAuditLog('CREATE', 'Organization'), async (req, res) => {
     try {
-        const { name, email, website, alias, address, logo, description, status, adminUser, departments } = req.body;
+        const { name, email, website, alias, address, logo, description, status, adminUser, departments, defaultPassword, defaultDepartment } = req.body;
 
         // Validate required fields
         if (!name || !email) {
@@ -161,6 +161,8 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
             address,
             logo,
             description,
+            defaultPassword,
+            defaultDepartment,
             status: status || 'active'
         });
 
@@ -183,9 +185,10 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
                 name: adminUser.name,
                 email: adminUser.email,
                 mobile: parseInt(adminUser.mobile, 10),
-                password: adminUser.password, // Pass plain password, pre-save hook will hash it
+                password: defaultPassword, // Use the organization's default password
                 role: orgAdminRole._id, // Use role ID from database
-                organization: organization._id
+                organization: organization._id,
+                department: defaultDepartment || (departments && departments.length > 0 ? departments[0] : 'ADMIN')
             });
 
             // Update organization with admin reference
@@ -244,7 +247,7 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
 // @access  Private (Super Admin only)
 router.put('/:id', requirePermissions('organizations.update'), createAuditLog('UPDATE', 'Organization'), async (req, res) => {
     try {
-        const { name, email, website, alias, address, logo, description, status, departments } = req.body;
+        const { name, email, website, alias, address, logo, description, status, departments, defaultPassword, defaultDepartment } = req.body;
 
         let organization = await Organization.findOne({
             _id: req.params.id,
@@ -284,6 +287,8 @@ router.put('/:id', requirePermissions('organizations.update'), createAuditLog('U
                 address,
                 logo,
                 description,
+                defaultPassword,
+                defaultDepartment,
                 status,
                 departments,
                 updatedAt: Date.now()

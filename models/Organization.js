@@ -63,6 +63,10 @@ const organizationSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    defaultPassword: {
+        type: String,
+        required: [true, 'Default password is required']
+    },
     admin: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
@@ -79,6 +83,11 @@ const organizationSchema = new mongoose.Schema({
             },
             message: 'At least one department is required'
         }
+    },
+    defaultDepartment: {
+        type: String,
+        trim: true,
+        uppercase: true
     },
     status: {
         type: String,
