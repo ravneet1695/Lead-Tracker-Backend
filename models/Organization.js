@@ -69,7 +69,8 @@ const organizationSchema = new mongoose.Schema({
     },
     departments: [{
         type: String,
-        trim: true
+        trim: true,
+        uppercase: true
     }],
     status: {
         type: String,
