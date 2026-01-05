@@ -234,6 +234,12 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
     try {
         const { code, name, email, mobile, role, organization, status, department } = req.body;
 
+        // Handle profile image
+        let profileImage = req.body.profileImage;
+        if (req.file) {
+            profileImage = `/uploads/profiles/${req.file.filename}`;
+        }
+
         // Validate required fields
         if (!name || !email || !mobile || !role) {
             return res.status(400).json({
