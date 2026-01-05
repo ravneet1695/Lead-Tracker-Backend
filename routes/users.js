@@ -63,9 +63,6 @@ router.get('/next-code', requirePermissions('users.create'), async (req, res) =>
             organizationId = req.user.organization;
         }
 
-        console.log('🔍 Fetching next user code:');
-        console.log('  - Organization ID:', organizationId);
-
         let nextCode;
 
         if (organizationId) {
@@ -117,9 +114,6 @@ router.get('/next-code', requirePermissions('users.create'), async (req, res) =>
 
             nextCode = `USR${String(nextNumber).padStart(4, '0')}`;
         }
-
-        console.log('  - Generated Code:', nextCode);
-
         res.json({
             success: true,
             code: nextCode
