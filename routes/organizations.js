@@ -190,15 +190,7 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
 
             // Update organization with admin reference
             organization.admin = user._id;
-            organization.departments = (departments && departments.length > 0) ? departments : [
-                'Sales',
-                'Marketing',
-                'Operations',
-                'Finance',
-                'Human Resources',
-                'IT Support',
-                'Customer Success'
-            ];
+            organization.departments = (departments && departments.length > 0) ? departments : [];
             await organization.save();
 
             res.status(201).json({
