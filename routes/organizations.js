@@ -121,10 +121,10 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
         }
 
         // Validate admin user details
-        if (!adminUser || !adminUser.name || !adminUser.email || !adminUser.password) {
+        if (!adminUser || !adminUser.name || !adminUser.email || !adminUser.mobile) {
             return res.status(400).json({
                 success: false,
-                message: 'Admin user details (name, email, password) are required'
+                message: 'Admin user details (name, email, mobile) are required'
             });
         }
 
@@ -163,6 +163,7 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
             description,
             defaultPassword,
             defaultDepartment,
+            departments: (departments && departments.length > 0) ? departments : [],
             status: status || 'active'
         });
 
@@ -193,7 +194,6 @@ router.post('/', requirePermissions('organizations.create'), createAuditLog('CRE
 
             // Update organization with admin reference
             organization.admin = user._id;
-            organization.departments = (departments && departments.length > 0) ? departments : [];
             await organization.save();
 
             res.status(201).json({

@@ -235,10 +235,18 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
         const { code, name, email, mobile, role, organization, status, department } = req.body;
 
         // Validate required fields
-        if (!name || !email || !mobile || !role || !department) {
+        if (!name || !email || !mobile || !role) {
             return res.status(400).json({
                 success: false,
-                message: 'All mandatory fields are required (name, email, mobile, role, department)'
+                message: 'Mandatory fields are required (name, email, mobile, role)'
+            });
+        }
+
+        // Department is mandatory ONLY if organization is provided
+        if (organization && !department) {
+            return res.status(400).json({
+                success: false,
+                message: 'Department is required for organization users'
             });
         }
 

@@ -55,7 +55,12 @@ const userSchema = new mongoose.Schema({
   },
   department: {
     type: String,
-    required: [true, 'Department is required'],
+    required: [
+      function () {
+        return !!this.organization;
+      },
+      'Department is required for organization users'
+    ],
     trim: true,
     default: null
   },
