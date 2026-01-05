@@ -78,8 +78,29 @@ router.get('/next-code', requirePermissions('organizations.create'), async (req,
 // @route   GET /api/organizations/:id
 // @desc    Get single organization
 // @access  Private (Admin & Super Admin)
-router.get('/:id', requirePermissions('organizations.read'), async (req, res) => {
+const { requirePermissions, protect } = require('../middleware/auth');
+
+// ... (existing code)
+
+// @route   GET /api/organizations/:id
+// @desc    Get single organization
+// @access  Private (Admin, Super Admin, or Org Admin for their own org)
+router.get('/:id', protect, async (req, res) => {
     try {
+        // Permission check:
+        // 1. Super Admin (has organizations.read)
+        // 2. Org Admin/User accessing their own organization
+        const hasPermission = req.user.role?.permissions?.includes('organizations.read') ||
+            req.user.role?.permissions?.includes('*') ||
+            (req.user.organization && req.user.organization.toString() === req.params.id);
+
+        if (!hasPermission) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to view this organization'
+            });
+        }
+
         const organization = await Organization.findOne({
             _id: req.params.id,
             deletedAt: null
