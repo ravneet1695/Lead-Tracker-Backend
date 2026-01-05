@@ -3,7 +3,7 @@ const router = express.Router();
 const Organization = require('../models/Organization');
 const User = require('../models/User');
 const Role = require('../models/Role');
-const { requirePermissions } = require('../middleware/auth');
+const { requirePermissions, protect } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
 const { generateNextCode, getRoleName } = require('../helpers/commonHelpers');
 const upload = require('../middleware/upload');
@@ -75,12 +75,7 @@ router.get('/next-code', requirePermissions('organizations.create'), async (req,
     }
 });
 
-// @route   GET /api/organizations/:id
-// @desc    Get single organization
-// @access  Private (Admin & Super Admin)
-const { requirePermissions, protect } = require('../middleware/auth');
 
-// ... (existing code)
 
 // @route   GET /api/organizations/:id
 // @desc    Get single organization
