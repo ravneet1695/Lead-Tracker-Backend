@@ -67,11 +67,19 @@ const organizationSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
-    departments: [{
-        type: String,
-        trim: true,
-        uppercase: true
-    }],
+    departments: {
+        type: [{
+            type: String,
+            trim: true,
+            uppercase: true
+        }],
+        validate: {
+            validator: function (v) {
+                return v && v.length > 0;
+            },
+            message: 'At least one department is required'
+        }
+    },
     status: {
         type: String,
         enum: ['active', 'inactive'],

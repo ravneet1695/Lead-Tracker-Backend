@@ -26,7 +26,7 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
             // Regular users (not admin) only see goals assigned to their groups
             // Ensure they have groups assigned
             if (req.user.groups && req.user.groups.length > 0) {
-                filter.groups = { $in: req.user.groups };
+                filter.group = { $in: req.user.groups };
             } else {
                 // If user has no groups, they see no goals
                 return res.json({
@@ -44,7 +44,7 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
 
         const goals = await Goal.find(filter)
             .populate('organization', 'name code')
-            .populate('groups', 'name code')
+            .populate('group', 'name code')
             .populate('createdBy', 'name email')
             .sort({ createdAt: -1 });
 
@@ -122,7 +122,7 @@ router.get('/:id', requirePermissions('goals.read'), async (req, res) => {
     try {
         const goal = await Goal.findById(req.params.id)
             .populate('organization', 'name code')
-            .populate('groups', 'name code')
+            .populate('group', 'name code')
             .populate('createdBy', 'name email');
 
         if (!goal) {
@@ -146,9 +146,8 @@ router.get('/:id', requirePermissions('goals.read'), async (req, res) => {
         } else if (userRole !== 'super_admin') {
             // Regular User: Must belong to one of the goal's groups
             const userGroupIds = req.user.groups.map(g => g.toString());
-            const goalGroupIds = goal.groups.map(g => g._id.toString());
-
-            const hasAccess = userGroupIds.some(id => goalGroupIds.includes(id));
+            const goalGroupId = goal.group._id.toString();
+            const hasAccess = userGroupIds.includes(goalGroupId);
 
             if (!hasAccess) {
                 return res.status(403).json({
@@ -250,15 +249,17 @@ router.get('/:id/form', requirePermissions('goals.read'), async (req, res) => {
 // @access  Private (Admin)
 router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, completionStatus } = req.body;
+        const { title, description, target, timeline, group: groupId, formSchema, statusOptions, pointsConfig, completionStatus } = req.body;
 
         // Validate required fields
-        if (!title || !groups || groups.length === 0) {
+        if (!title || !groupId) {
             return res.status(400).json({
                 success: false,
-                message: 'Title and at least one group are required'
+                message: 'Title and group are required'
             });
         }
+
+        const group = groupId; // The frontend now sends a single ID
 
         // Determine organization
         let organizationId;
@@ -273,20 +274,19 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
             });
         }
 
-        // Validate that all groups belong to the same organization
-        const groupDocs = await Group.find({ _id: { $in: groups } });
-        if (groupDocs.length !== groups.length) {
+        // Validate group belongs to the organization
+        const groupDoc = await Group.findById(group);
+        if (!groupDoc) {
             return res.status(400).json({
                 success: false,
-                message: 'One or more groups not found'
+                message: 'Group not found'
             });
         }
 
-        const invalidGroups = groupDocs.filter(g => g.organization.toString() !== organizationId.toString());
-        if (invalidGroups.length > 0) {
+        if (groupDoc.organization.toString() !== organizationId.toString()) {
             return res.status(400).json({
                 success: false,
-                message: 'All groups must belong to the same organization'
+                message: 'Group must belong to the selected organization'
             });
         }
 
@@ -308,7 +308,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
             target,
             timeline,
             organization: organizationId,
-            groups,
+            group,
             formSchema,
             statusOptions,
             pointsConfig,
@@ -318,7 +318,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
 
         const populatedGoal = await Goal.findById(goal._id)
             .populate('organization', 'name code')
-            .populate('groups', 'name code')
+            .populate('group', 'name code')
             .populate('createdBy', 'name email');
 
         res.status(201).json({
@@ -339,7 +339,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
 // @access  Private (Admin)
 router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status, completionStatus } = req.body;
+        const { title, description, target, timeline, group, formSchema, statusOptions, pointsConfig, status, completionStatus } = req.body;
 
         let goal = await Goal.findById(req.params.id);
 
@@ -360,21 +360,20 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
             }
         }
 
-        // Validate groups if provided
-        if (groups && groups.length > 0) {
-            const groupDocs = await Group.find({ _id: { $in: groups } });
-            if (groupDocs.length !== groups.length) {
+        // Validate group if provided
+        if (group) {
+            const groupDoc = await Group.findById(group);
+            if (!groupDoc) {
                 return res.status(400).json({
                     success: false,
-                    message: 'One or more groups not found'
+                    message: 'Group not found'
                 });
             }
 
-            const invalidGroups = groupDocs.filter(g => g.organization.toString() !== goal.organization.toString());
-            if (invalidGroups.length > 0) {
+            if (groupDoc.organization.toString() !== goal.organization.toString()) {
                 return res.status(400).json({
                     success: false,
-                    message: 'All groups must belong to the same organization'
+                    message: 'Group must belong to the same organization'
                 });
             }
         }
@@ -393,10 +392,10 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
 
         goal = await Goal.findByIdAndUpdate(
             req.params.id,
-            { title, description, target, timeline, groups, formSchema, statusOptions, pointsConfig, status, completionStatus },
+            { title, description, target, timeline, group, formSchema, statusOptions, pointsConfig, status, completionStatus },
             { new: true, runValidators: true }
         ).populate('organization', 'name code')
-            .populate('groups', 'name code')
+            .populate('group', 'name code')
             .populate('createdBy', 'name email');
 
         res.json({

@@ -57,8 +57,7 @@ router.get('/', requireAuth, async (req, res) => {
         }
 
         if (group) {
-            // Similar logic could apply if we restricted groups, but currently groups are filtered by goal context
-            filter.groups = group;
+            filter.group = group;
         }
 
         if (status) filter.status = status;
@@ -66,7 +65,7 @@ router.get('/', requireAuth, async (req, res) => {
         const entries = await GoalEntry.find(filter)
             .populate('goal', 'title')
             .populate('user', 'name email')
-            .populate('groups', 'name')
+            .populate('group', 'name')
             .sort('-updatedAt');
 
         res.json({
@@ -91,7 +90,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         const entry = await GoalEntry.findById(req.params.id)
             .populate('goal')
             .populate('user', 'name email')
-            .populate('groups', 'name');
+            .populate('group', 'name');
 
         if (!entry) {
             return res.status(404).json({
@@ -147,10 +146,10 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 // @access  Private
 router.post('/', requireAuth, async (req, res) => {
     try {
-        const { goal, groups, data, status, contacts, remarks } = req.body;
+        const { goal, data, status, contacts, remarks } = req.body;
 
-        // Verify goal exists and populate groups
-        const goalDoc = await Goal.findById(goal).populate('groups');
+        // Verify goal exists and populate group
+        const goalDoc = await Goal.findById(goal).populate('group');
         if (!goalDoc) {
             return res.status(404).json({
                 success: false,
@@ -158,11 +157,11 @@ router.post('/', requireAuth, async (req, res) => {
             });
         }
 
-        // Verify user belongs to one of the goal's assigned groups
+        // Verify user belongs to the goal's assigned group
         const userGroups = req.user.groups || [];
-        const goalGroupIds = goalDoc.groups.map(g => g._id.toString());
+        const goalGroupId = goalDoc.group._id.toString();
         const hasAccess = userGroups.some(userGroupId =>
-            goalGroupIds.includes(userGroupId.toString())
+            userGroupId.toString() === goalGroupId
         );
 
         if (!hasAccess) {
@@ -172,24 +171,8 @@ router.post('/', requireAuth, async (req, res) => {
             });
         }
 
-        // Validate selected groups
-        const selectedGroups = Array.isArray(groups) ? groups : (groups ? [groups] : []);
-
-        if (selectedGroups.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please select at least one group'
-            });
-        }
-
-        // Validate selected groups are assigned to this goal
-        const invalidGroups = selectedGroups.filter(g => !goalGroupIds.includes(g));
-        if (invalidGroups.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'One or more selected groups are not assigned to this goal'
-            });
-        }
+        // Use the goal's group
+        const selectedGroup = goalDoc.group._id.toString();
 
         // Validate required form fields
         if (goalDoc.formSchema && goalDoc.formSchema.length > 0) {
@@ -235,7 +218,7 @@ router.post('/', requireAuth, async (req, res) => {
         const entry = await GoalEntry.create({
             goal,
             user: req.user.id,
-            groups: selectedGroups,
+            group: selectedGroup,
             data,
             status: status || goalDoc.statusOptions?.[0] || 'New',
             contacts,
@@ -307,7 +290,7 @@ router.post('/', requireAuth, async (req, res) => {
         const populatedEntry = await GoalEntry.findById(entry._id)
             .populate('goal', 'title')
             .populate('user', 'name email')
-            .populate('groups', 'name');
+            .populate('group', 'name');
 
         res.status(201).json({
             success: true,

@@ -109,11 +109,11 @@ const goalSchema = new mongoose.Schema({
         ref: 'Organization',
         required: [true, 'Organization is required']
     },
-    groups: [{
+    group: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Group',
-        required: true
-    }],
+        required: [true, 'Group is required']
+    },
     formSchema: [formFieldSchema],
     statusOptions: [{
         type: String
