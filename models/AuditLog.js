@@ -27,6 +27,7 @@ const auditLogSchema = new mongoose.Schema({
             'DELETE',
             'LOGIN',
             'LOGOUT',
+            'PASSWORD_CHANGE',
             'VIEW',
             'EXPORT',
             'IMPORT',
