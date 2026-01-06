@@ -250,7 +250,7 @@ router.get('/:id/form', requirePermissions('goals.read'), async (req, res) => {
 // @access  Private (Admin)
 router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, group: groupId, formSchema, statusOptions, pointsConfig, completionStatus } = req.body;
+        const { title, description, target, timeline, group: groupId, formSchema, statusOptions, completionStatus } = req.body;
 
         // Validate required fields
         if (!title || !groupId) {
@@ -353,7 +353,6 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
             group,
             formSchema,
             statusOptions,
-            pointsConfig,
             completionStatus,
             status: initialStatus,
             isExpired,
@@ -383,7 +382,7 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
 // @access  Private (Admin)
 router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 'Goal'), async (req, res) => {
     try {
-        const { title, description, target, timeline, group, formSchema, statusOptions, pointsConfig, status, completionStatus } = req.body;
+        const { title, description, target, timeline, group, formSchema, statusOptions, status, completionStatus } = req.body;
 
         let goal = await Goal.findById(req.params.id);
 

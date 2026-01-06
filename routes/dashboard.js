@@ -5,7 +5,6 @@ const Organization = require('../models/Organization');
 const Role = require('../models/Role');
 const Goal = require('../models/Goal');
 const GoalEntry = require('../models/GoalEntry');
-const Gamification = require('../models/Gamification');
 const { requireAuth } = require('../middleware/auth');
 const { getRoleName } = require('../helpers/commonHelpers');
 
@@ -133,10 +132,6 @@ async function getOrgAdminDashboard(user) {
         { $group: { _id: '$role', count: { $sum: 1 } } }
     ]);
 
-    const topPerformers = await Gamification.find({ user: { $in: await User.find({ organization: user.organization }).distinct('_id') } })
-        .sort({ totalPoints: -1 })
-        .limit(10)
-        .populate('user', 'name email');
 
     return {
         role: getRoleName('org_admin'),
@@ -181,9 +176,6 @@ async function getManagerDashboard(user) {
         status: 'approved'
     });
 
-    const teamPerformance = await Gamification.find({ user: { $in: teamMemberIds } })
-        .sort({ totalPoints: -1 })
-        .populate('user', 'name email');
 
     return {
         role: 'manager',
@@ -194,8 +186,8 @@ async function getManagerDashboard(user) {
             completedEntries,
             completionRate: teamGoalEntries > 0 ? ((completedEntries / teamGoalEntries) * 100).toFixed(2) : 0
         },
-        teamPerformance,
-        leaderboard: teamPerformance.slice(0, 10),
+        teamPerformance: [],
+        leaderboard: [],
         recentActivity: await getRecentActivity(null, 10, teamMemberIds)
     };
 }
@@ -206,12 +198,11 @@ async function getSalesDashboard(user) {
     const completedEntries = await GoalEntry.countDocuments({ user: user._id, status: 'approved' });
     const pendingEntries = await GoalEntry.countDocuments({ user: user._id, status: 'pending' });
 
-    const myStats = await Gamification.findOne({ user: user._id });
 
     const recentEntries = await GoalEntry.find({ user: user._id })
         .sort({ createdAt: -1 })
         .limit(5)
-        .populate('goal', 'name points');
+        .populate('goal', 'name');
 
     return {
         role: 'sales',
@@ -220,9 +211,9 @@ async function getSalesDashboard(user) {
             totalEntries: myEntries,
             completedEntries,
             pendingEntries,
-            totalPoints: myStats?.totalPoints || 0,
-            badges: myStats?.badges || [],
-            level: myStats?.level || 1
+            totalPoints: 0,
+            badges: [],
+            level: 1
         },
         recentEntries,
         recentActivity: await getRecentActivity(null, 10, [user._id])

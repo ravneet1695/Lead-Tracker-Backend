@@ -3,7 +3,6 @@ const router = express.Router();
 const User = require('../models/User');
 const Role = require('../models/Role');
 const AuditLog = require('../models/AuditLog');
-const Gamification = require('../models/Gamification');
 const { requireAuth, requirePermissions } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
 const { isSuperAdmin, generateNextCode, applyOrganizationFilter } = require('../helpers/commonHelpers');
@@ -315,8 +314,6 @@ router.post('/', requirePermissions('users.create'), upload.single('profileImage
             status: status || 'active'
         });
 
-        // Create gamification record
-        await Gamification.create({ user: user._id });
 
         res.status(201).json({
             success: true,

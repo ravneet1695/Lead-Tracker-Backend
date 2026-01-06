@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const GoalEntry = require('../models/GoalEntry');
 const Goal = require('../models/Goal');
-const Gamification = require('../models/Gamification');
 const LeadActivity = require('../models/LeadActivity');
 const { requireAuth } = require('../middleware/auth');
 
@@ -251,7 +250,8 @@ router.post('/', requireAuth, async (req, res) => {
         // Award points for entry creation
         const gamification = await Gamification.findOne({ user: req.user.id });
         if (gamification && goalDoc.pointsConfig) {
-            await gamification.addPoints(goalDoc.pointsConfig.entryCreation || 10);
+            const pointsToAdd = goalDoc.pointsConfig.entryCreation || 10;
+            await gamification.addPoints(pointsToAdd);
         }
 
         // Check if goal target is reached based on revenue or lead count
@@ -319,8 +319,7 @@ router.post('/', requireAuth, async (req, res) => {
             success: true,
             message: goalCompleted ? 'Lead created successfully! 🎉 Goal target reached!' : 'Lead created successfully',
             entry: populatedEntry,
-            goalCompleted,
-            bonusPoints: goalCompleted ? 50 : 0
+            goalCompleted
         });
     } catch (error) {
         console.error('Error creating goal entry:', error);
@@ -376,7 +375,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         await entry.save();
 
         const updatedEntry = await GoalEntry.findById(req.params.id)
-            .populate('goal', 'title pointsConfig')
+            .populate('goal', 'title')
             .populate('user', 'name email')
             .populate('group', 'name')
             .populate('remarks.user', 'name');
@@ -394,13 +393,6 @@ router.put('/:id', requireAuth, async (req, res) => {
             await logLeadActivity(entry._id, req.user.id, 'REMARK_ADDED', 'New remark added');
         }
 
-        // Award points for status update
-        if (status && status !== oldStatus) {
-            const gamification = await Gamification.findOne({ user: entry.user._id });
-            if (gamification) {
-                await gamification.addPoints(updatedEntry.goal.pointsConfig.statusUpdate);
-            }
-        }
 
         res.json({
             success: true,

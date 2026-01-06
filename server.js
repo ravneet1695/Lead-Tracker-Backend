@@ -30,7 +30,6 @@ app.use('/api/groups', require('./routes/groups'));
 app.use('/api/goals', require('./routes/goals'));
 app.use('/api/goal-entries', require('./routes/goalEntries'));
 app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/gamification', require('./routes/gamification'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/organizations', require('./routes/organizations'));
 app.use('/api/roles', require('./routes/roles'));

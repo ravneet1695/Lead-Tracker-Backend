@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const Gamification = require('../models/Gamification');
 const { protect } = require('../middleware/auth');
 const { logAction } = require('../middleware/auditLog');
 
@@ -119,8 +118,6 @@ router.post('/register', async (req, res) => {
             role: role || 'sales'
         });
 
-        // Create gamification record
-        await Gamification.create({ user: user._id });
 
         // Create token
         const token = jwt.sign(
