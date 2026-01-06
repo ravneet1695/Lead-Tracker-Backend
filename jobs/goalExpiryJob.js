@@ -13,30 +13,45 @@ const initGoalExpiryJob = () => {
         try {
             const currentDate = new Date();
 
-            // Find all active goals with an end date
+            // Find all goals that are NOT manually inactivated
             const goals = await Goal.find({
-                status: 'active',
-                'timeline.endDate': { $exists: true }
+                status: { $ne: 'inactive' }
             });
 
-            console.log(`Checking ${goals.length} active goals for expiry...`);
+            console.log(`Checking ${goals.length} goals for status transitions...`);
 
-            let expiredCount = 0;
+            let updatedCount = 0;
             const updatePromises = goals.map(async (goal) => {
-                // Since endDate is normalized to 23:59:59, 
-                // we check if it's before the current moment.
-                // Or simply check if currentMoment has passed the endDate.
-                if (currentDate > goal.timeline.endDate) {
-                    goal.status = 'inactive';
-                    goal.isExpired = true;
+                const now = new Date();
+                const startDate = goal.timeline?.startDate ? new Date(goal.timeline.startDate) : null;
+                const endDate = goal.timeline?.endDate ? new Date(goal.timeline.endDate) : null;
+
+                let newStatus = goal.status;
+                let isExpired = goal.isExpired;
+
+                if (endDate && now > endDate) {
+                    newStatus = 'closed';
+                    isExpired = true;
+                } else if (startDate && now < startDate) {
+                    newStatus = 'upcoming';
+                    isExpired = false;
+                } else {
+                    newStatus = 'active';
+                    isExpired = false;
+                }
+
+                if (newStatus !== goal.status || isExpired !== goal.isExpired) {
+                    const oldStatus = goal.status;
+                    goal.status = newStatus;
+                    goal.isExpired = isExpired;
                     await goal.save();
-                    expiredCount++;
-                    console.log(`Goal "${goal.title}" (${goal._id}) marked as EXPIRED.`);
+                    updatedCount++;
+                    console.log(`Goal "${goal.title}" (${goal._id}) transitioned: ${oldStatus.toUpperCase()} -> ${newStatus.toUpperCase()}.`);
                 }
             });
 
             await Promise.all(updatePromises);
-            console.log(`--- Goal Expiry Job Completed. ${expiredCount} goals expired. ---`);
+            console.log(`--- Goal Status Transition Job Completed. ${updatedCount} goals updated. ---`);
         } catch (error) {
             console.error('Error in Goal Expiry Cron Job:', error);
         }

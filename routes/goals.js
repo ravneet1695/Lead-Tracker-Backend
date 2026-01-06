@@ -327,13 +327,20 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
         let initialStatus = 'active';
         let isExpired = false;
 
-        if (normalizedTimeline && normalizedTimeline.endDate) {
+        if (normalizedTimeline) {
             const now = new Date();
-            const endDate = new Date(normalizedTimeline.endDate);
+            const startDate = normalizedTimeline.startDate ? new Date(normalizedTimeline.startDate) : null;
+            const endDate = normalizedTimeline.endDate ? new Date(normalizedTimeline.endDate) : null;
 
-            if (now > endDate) {
-                initialStatus = 'inactive';
+            if (endDate && now > endDate) {
+                initialStatus = 'closed';
                 isExpired = true;
+            } else if (startDate && now < startDate) {
+                initialStatus = 'upcoming';
+                isExpired = false;
+            } else {
+                initialStatus = 'active';
+                isExpired = false;
             }
         }
 
@@ -448,21 +455,27 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
         }
 
         // Determine status based on timeline
-        let updatedStatus = status;
+        let updatedStatus = status || goal.status;
         let isExpired = goal.isExpired;
 
-        if (normalizedTimeline && normalizedTimeline.endDate) {
-            const now = new Date();
-            const endDate = new Date(normalizedTimeline.endDate);
-            const startDate = normalizedTimeline.startDate ? new Date(normalizedTimeline.startDate) : null;
+        // Only auto-update status if it's not manually set to inactive
+        if (updatedStatus !== 'inactive') {
+            const effectiveTimeline = normalizedTimeline || goal.timeline;
+            if (effectiveTimeline) {
+                const now = new Date();
+                const startDate = effectiveTimeline.startDate ? new Date(effectiveTimeline.startDate) : null;
+                const endDate = effectiveTimeline.endDate ? new Date(effectiveTimeline.endDate) : null;
 
-            if (now > endDate) {
-                updatedStatus = 'inactive';
-                isExpired = true;
-            } else if (!startDate || now >= startDate) {
-                // If now is between startDate and endDate, set to active
-                updatedStatus = 'active';
-                isExpired = false;
+                if (endDate && now > endDate) {
+                    updatedStatus = 'closed';
+                    isExpired = true;
+                } else if (startDate && now < startDate) {
+                    updatedStatus = 'upcoming';
+                    isExpired = false;
+                } else {
+                    updatedStatus = 'active';
+                    isExpired = false;
+                }
             }
         }
 
