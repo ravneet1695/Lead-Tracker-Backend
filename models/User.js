@@ -69,6 +69,18 @@ const userSchema = new mongoose.Schema({
     enum: ['active', 'inactive'],
     default: 'active'
   },
+  mustChangePassword: {
+    type: Boolean,
+    default: true
+  },
+  otpCode: {
+    type: String,
+    default: null
+  },
+  otpExpire: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

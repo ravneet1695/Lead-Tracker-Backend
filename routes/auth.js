@@ -76,6 +76,7 @@ router.post('/login', async (req, res) => {
         res.json({
             success: true,
             token,
+            mustChangePassword: user.mustChangePassword,
             user: {
                 id: user._id,
                 name: user.name,
@@ -190,6 +191,99 @@ router.post('/logout', protect, async (req, res) => {
         res.json({
             success: true,
             message: 'Logged out successfully'
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
+    }
+});
+
+// @route   POST /api/auth/change-password-first-time
+// @desc    Change password for first-time login
+// @access  Public (requires email + current password + new password)
+router.post('/change-password-first-time', async (req, res) => {
+    try {
+        const { email, currentPassword, newPassword } = req.body;
+
+        // Validate input
+        if (!email || !currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email, current password, and new password are required'
+            });
+        }
+
+        // Validate password strength
+        if (newPassword.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be at least 8 characters long'
+            });
+        }
+
+        // Find user and validate current credentials
+        const user = await User.findOne({ email })
+            .select('+password')
+            .populate('role', 'name label permissions')
+            .populate('organization', 'name logo');
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        // Verify current password
+        const isMatch = await user.comparePassword(currentPassword);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        // Update password and clear mustChangePassword flag
+        user.password = newPassword;
+        user.mustChangePassword = false;
+        await user.save();
+
+        // Log password change
+        await logAction(
+            user._id,
+            user.name,
+            user.email,
+            'PASSWORD_CHANGE',
+            'User',
+            'User changed password on first login',
+            {
+                ipAddress: req.ip || req.connection.remoteAddress,
+                userAgent: req.get('user-agent')
+            }
+        );
+
+        // Create token for automatic login
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRE }
+        );
+
+        res.json({
+            success: true,
+            token,
+            mustChangePassword: false,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                organization: user.organization,
+                groups: user.groups
+            }
         });
     } catch (error) {
         console.error(error);
