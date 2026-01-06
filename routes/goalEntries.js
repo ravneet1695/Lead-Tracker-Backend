@@ -3,7 +3,23 @@ const router = express.Router();
 const GoalEntry = require('../models/GoalEntry');
 const Goal = require('../models/Goal');
 const Gamification = require('../models/Gamification');
+const LeadActivity = require('../models/LeadActivity');
 const { requireAuth } = require('../middleware/auth');
+
+// Helper to log lead activity
+const logLeadActivity = async (leadId, userId, action, description, metadata = {}) => {
+    try {
+        await LeadActivity.create({
+            lead: leadId,
+            user: userId,
+            action,
+            description,
+            metadata
+        });
+    } catch (error) {
+        console.error('Error logging lead activity:', error);
+    }
+};
 
 // @route   GET /api/goal-entries
 // @desc    Get goal entries (filtered by role)
@@ -222,8 +238,15 @@ router.post('/', requireAuth, async (req, res) => {
             data,
             status: status || goalDoc.statusOptions?.[0] || 'New',
             contacts,
-            remarks
+            remarks: remarks ? [{
+                text: remarks,
+                user: req.user.id,
+                createdAt: new Date()
+            }] : []
         });
+
+        // Log activity
+        await logLeadActivity(entry._id, req.user.id, 'CREATED', 'Lead created');
 
         // Award points for entry creation
         const gamification = await Gamification.findOne({ user: req.user.id });
@@ -333,26 +356,55 @@ router.put('/:id', requireAuth, async (req, res) => {
         }
 
         const oldStatus = entry.status;
+        const oldData = JSON.stringify(entry.data);
 
-        entry = await GoalEntry.findByIdAndUpdate(
-            req.params.id,
-            { data, status, contacts, remarks },
-            { new: true, runValidators: true }
-        ).populate('goal', 'title pointsConfig')
+        // Update basic fields
+        if (status) entry.status = status;
+        if (data) entry.data = data;
+        if (contacts) entry.contacts = contacts;
+
+        // Note: remarks are handled via a separate endpoint now for better tracking,
+        // but if sent in PUT, we append them for backward compatibility or bulk updates.
+        if (remarks && typeof remarks === 'string') {
+            entry.remarks.push({
+                text: remarks,
+                user: req.user.id,
+                createdAt: new Date()
+            });
+        }
+
+        await entry.save();
+
+        const updatedEntry = await GoalEntry.findById(req.params.id)
+            .populate('goal', 'title pointsConfig')
             .populate('user', 'name email')
-            .populate('group', 'name');
+            .populate('group', 'name')
+            .populate('remarks.user', 'name');
+
+        // Log activities
+        if (status && status !== oldStatus) {
+            await logLeadActivity(entry._id, req.user.id, 'STATUS_CHANGE', `Status updated from ${oldStatus} to ${status}`, { oldStatus, newStatus: status });
+        }
+
+        if (data && JSON.stringify(data) !== oldData) {
+            await logLeadActivity(entry._id, req.user.id, 'DATA_UPDATE', 'Lead details updated');
+        }
+
+        if (remarks) {
+            await logLeadActivity(entry._id, req.user.id, 'REMARK_ADDED', 'New remark added');
+        }
 
         // Award points for status update
         if (status && status !== oldStatus) {
             const gamification = await Gamification.findOne({ user: entry.user._id });
             if (gamification) {
-                await gamification.addPoints(entry.goal.pointsConfig.statusUpdate);
+                await gamification.addPoints(updatedEntry.goal.pointsConfig.statusUpdate);
             }
         }
 
         res.json({
             success: true,
-            entry
+            entry: updatedEntry
         });
     } catch (error) {
         console.error(error);
@@ -397,6 +449,63 @@ router.delete('/:id', requireAuth, async (req, res) => {
             success: false,
             message: 'Server error'
         });
+    }
+});
+
+// @route   POST /api/goal-entries/:id/remarks
+// @desc    Add remark to lead
+// @access  Private
+router.post('/:id/remarks', requireAuth, async (req, res) => {
+    try {
+        const { text } = req.body;
+        if (!text) {
+            return res.status(400).json({ success: false, message: 'Remark text is required' });
+        }
+
+        const entry = await GoalEntry.findById(req.params.id);
+        if (!entry) {
+            return res.status(404).json({ success: false, message: 'Lead not found' });
+        }
+
+        entry.remarks.push({
+            text,
+            user: req.user.id,
+            createdAt: new Date()
+        });
+
+        await entry.save();
+
+        await logLeadActivity(entry._id, req.user.id, 'REMARK_ADDED', `Remark added: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+
+        const updatedEntry = await GoalEntry.findById(entry._id)
+            .populate('remarks.user', 'name');
+
+        res.json({
+            success: true,
+            remarks: updatedEntry.remarks
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+// @route   GET /api/goal-entries/:id/activities
+// @desc    Get activity logs for lead
+// @access  Private
+router.get('/:id/activities', requireAuth, async (req, res) => {
+    try {
+        const activities = await LeadActivity.find({ lead: req.params.id })
+            .populate('user', 'name')
+            .sort('-timestamp');
+
+        res.json({
+            success: true,
+            activities
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 

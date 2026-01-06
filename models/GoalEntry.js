@@ -44,9 +44,17 @@ const goalEntrySchema = new mongoose.Schema({
     },
     statusHistory: [statusHistorySchema],
     contacts: [contactSchema],
-    remarks: {
-        type: String
-    },
+    remarks: [{
+        text: String,
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
     createdAt: {
         type: Date,
         default: Date.now
