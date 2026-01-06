@@ -48,21 +48,6 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
             .populate('createdBy', 'name email')
             .sort({ createdAt: -1 });
 
-        // Auto-update goal status based on timeline
-        const now = new Date();
-        const updatePromises = goals.map(async (goal) => {
-            if (goal.timeline?.endDate && goal.status === 'active') {
-                const endDate = new Date(goal.timeline.endDate);
-                if (endDate < now) {
-                    // Mark goal as inactive if end date has passed
-                    goal.status = 'inactive';
-                    goal.isExpired = true;
-                    await goal.save();
-                }
-            }
-        });
-        await Promise.all(updatePromises);
-
 
         // Calculate progress for each goal
         const GoalEntry = require('../models/GoalEntry');
@@ -318,17 +303,53 @@ router.post('/', requirePermissions('goals.create'), createAuditLog('CREATE', 'G
             }
         }
 
+        // Normalize timeline dates using moment.js
+        let normalizedTimeline = timeline;
+        if (timeline) {
+            normalizedTimeline = {};
+
+            // Set start date to 00:00:00 local, then convert to ISO (UTC)
+            if (timeline.startDate) {
+                const d = new Date(timeline.startDate);
+                d.setHours(0, 0, 0, 0);
+                normalizedTimeline.startDate = d.toISOString();
+            }
+
+            // Set end date to 23:59:59 local, then convert to ISO (UTC)
+            if (timeline.endDate) {
+                const d = new Date(timeline.endDate);
+                d.setHours(23, 59, 59, 999);
+                normalizedTimeline.endDate = d.toISOString();
+            }
+        }
+
+        // Determine initial status based on timeline
+        let initialStatus = 'active';
+        let isExpired = false;
+
+        if (normalizedTimeline && normalizedTimeline.endDate) {
+            const now = new Date();
+            const endDate = new Date(normalizedTimeline.endDate);
+
+            if (now > endDate) {
+                initialStatus = 'inactive';
+                isExpired = true;
+            }
+        }
+
         const goal = await Goal.create({
             title,
             description,
             target,
-            timeline,
+            timeline: normalizedTimeline,
             organization: organizationId,
             group,
             formSchema,
             statusOptions,
             pointsConfig,
             completionStatus,
+            status: initialStatus,
+            isExpired,
             createdBy: req.user.id
         });
 
@@ -406,9 +427,48 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
             }
         }
 
+        // Normalize timeline dates if timeline is being updated using moment.js
+        let normalizedTimeline = timeline;
+        if (timeline) {
+            normalizedTimeline = {};
+
+            // Set start date to 00:00:00 local, then convert to ISO (UTC)
+            if (timeline.startDate) {
+                const d = new Date(timeline.startDate);
+                d.setHours(0, 0, 0, 0);
+                normalizedTimeline.startDate = d.toISOString();
+            }
+
+            // Set end date to 23:59:59 local, then convert to ISO (UTC)
+            if (timeline.endDate) {
+                const d = new Date(timeline.endDate);
+                d.setHours(23, 59, 59, 999);
+                normalizedTimeline.endDate = d.toISOString();
+            }
+        }
+
+        // Determine status based on timeline
+        let updatedStatus = status;
+        let isExpired = goal.isExpired;
+
+        if (normalizedTimeline && normalizedTimeline.endDate) {
+            const now = new Date();
+            const endDate = new Date(normalizedTimeline.endDate);
+            const startDate = normalizedTimeline.startDate ? new Date(normalizedTimeline.startDate) : null;
+
+            if (now > endDate) {
+                updatedStatus = 'inactive';
+                isExpired = true;
+            } else if (!startDate || now >= startDate) {
+                // If now is between startDate and endDate, set to active
+                updatedStatus = 'active';
+                isExpired = false;
+            }
+        }
+
         goal = await Goal.findByIdAndUpdate(
             req.params.id,
-            { title, description, target, timeline, group, formSchema, statusOptions, pointsConfig, status, completionStatus },
+            { title, description, target, timeline: normalizedTimeline, group, formSchema, statusOptions, pointsConfig, status: updatedStatus, isExpired, completionStatus },
             { new: true, runValidators: true }
         ).populate('organization', 'name code')
             .populate('group', 'name code')
