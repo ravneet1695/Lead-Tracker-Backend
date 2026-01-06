@@ -100,6 +100,10 @@ const goalSchema = new mongoose.Schema({
         required: [true, 'Goal title is required'],
         trim: true
     },
+    description: {
+        type: String,
+        trim: true
+    },
     timeline: {
         startDate: Date,
         endDate: Date
@@ -113,6 +117,10 @@ const goalSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Group',
         required: [true, 'Group is required']
+    },
+    target: {
+        type: Number,
+        default: 0
     },
     formSchema: [formFieldSchema],
     statusOptions: [{
@@ -132,6 +140,10 @@ const goalSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'inactive'],
         default: 'active'
+    },
+    isExpired: {
+        type: Boolean,
+        default: false
     },
     completedAt: {
         type: Date

@@ -48,6 +48,22 @@ router.get('/', requirePermissions('goals.read'), async (req, res) => {
             .populate('createdBy', 'name email')
             .sort({ createdAt: -1 });
 
+        // Auto-update goal status based on timeline
+        const now = new Date();
+        const updatePromises = goals.map(async (goal) => {
+            if (goal.timeline?.endDate && goal.status === 'active') {
+                const endDate = new Date(goal.timeline.endDate);
+                if (endDate < now) {
+                    // Mark goal as inactive if end date has passed
+                    goal.status = 'inactive';
+                    goal.isExpired = true;
+                    await goal.save();
+                }
+            }
+        });
+        await Promise.all(updatePromises);
+
+
         // Calculate progress for each goal
         const GoalEntry = require('../models/GoalEntry');
         const goalsWithProgress = await Promise.all(goals.map(async (goal) => {
