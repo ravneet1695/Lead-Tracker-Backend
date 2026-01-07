@@ -107,6 +107,7 @@ async function getSuperAdminDashboard(user) {
             userDistribution: usersByRole
         },
         topOrganizations: orgStats,
+        goalStagesSummary: await getGoalStagesSummary({}),
         recentActivity: await getRecentActivity(null, 10)
     };
 }
@@ -150,7 +151,8 @@ async function getOrgAdminDashboard(user) {
                 return acc;
             }, {})
         },
-        leaderboard: topPerformers,
+        leaderboard: [],
+        goalStagesSummary: await getGoalStagesSummary({ organization: user.organization }),
         recentActivity: await getRecentActivity(user.organization, 10)
     };
 }
@@ -188,6 +190,7 @@ async function getManagerDashboard(user) {
         },
         teamPerformance: [],
         leaderboard: [],
+        goalStagesSummary: await getGoalStagesSummary({ user: { $in: teamMemberIds } }),
         recentActivity: await getRecentActivity(null, 10, teamMemberIds)
     };
 }
@@ -216,8 +219,106 @@ async function getSalesDashboard(user) {
             level: 1
         },
         recentEntries,
+        goalStagesSummary: await getGoalStagesSummary({ user: user._id }),
         recentActivity: await getRecentActivity(null, 10, [user._id])
     };
+}
+
+// Helper function to get goal stages summary
+async function getGoalStagesSummary(filter) {
+    const goals = await Goal.find(filter)
+        .select('title statusOptions completionStatus formSchema group')
+        .populate({
+            path: 'group',
+            select: 'users',
+            populate: {
+                path: 'users',
+                select: 'name email'
+            }
+        });
+
+    const summary = await Promise.all(goals.map(async (goal) => {
+        const firstField = goal.formSchema && goal.formSchema[0] ? goal.formSchema[0].fieldName : null;
+
+        const entries = await GoalEntry.find({ goal: goal._id, ...filter })
+            .populate('user', 'name email')
+            .select('user status data _id');
+
+        const groupMembers = goal.group?.users || [];
+        const memberBreakdownObj = {};
+
+        // Pre-populate all group members
+        groupMembers.forEach(user => {
+            memberBreakdownObj[user._id.toString()] = {
+                userId: user._id.toString(),
+                userName: user.name,
+                stages: {}
+            };
+        });
+
+        // Populate entries
+        entries.forEach(entry => {
+            const userId = entry.user?._id?.toString();
+            if (!userId) return;
+
+            const status = entry.status || 'Initiated';
+
+            if (!memberBreakdownObj[userId]) {
+                memberBreakdownObj[userId] = {
+                    userId,
+                    userName: entry.user.name,
+                    stages: {}
+                };
+            }
+
+            if (!memberBreakdownObj[userId].stages[status]) {
+                memberBreakdownObj[userId].stages[status] = [];
+            }
+
+            const leadTitle = firstField && entry.data?.[firstField]
+                ? entry.data[firstField]
+                : `Lead ${entry._id.toString().slice(-6)}`;
+
+            memberBreakdownObj[userId].stages[status].push({
+                id: entry._id,
+                title: leadTitle
+            });
+        });
+
+        // Convert to array format
+        const memberBreakdown = Object.values(memberBreakdownObj).map(member => ({
+            userId: member.userId,
+            userName: member.userName,
+            stages: Object.entries(member.stages).map(([status, leads]) => ({
+                status,
+                leads,
+                count: leads.length
+            }))
+        }));
+
+        // Calculate stage totals
+        const stageTotals = {};
+        memberBreakdown.forEach(member => {
+            member.stages.forEach(stage => {
+                stageTotals[stage.status] = (stageTotals[stage.status] || 0) + stage.count;
+            });
+        });
+
+        const stages = Object.entries(stageTotals).map(([status, count]) => ({
+            status,
+            count
+        }));
+
+        return {
+            goalId: goal._id,
+            goalTitle: goal.title,
+            completionStatus: goal.completionStatus,
+            stages,
+            memberBreakdown
+        };
+    }));
+
+    return summary;
 }
 
 // Helper function to get recent activity

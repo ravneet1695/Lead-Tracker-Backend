@@ -247,13 +247,6 @@ router.post('/', requireAuth, async (req, res) => {
         // Log activity
         await logLeadActivity(entry._id, req.user.id, 'CREATED', 'Lead created');
 
-        // Award points for entry creation
-        const gamification = await Gamification.findOne({ user: req.user.id });
-        if (gamification && goalDoc.pointsConfig) {
-            const pointsToAdd = goalDoc.pointsConfig.entryCreation || 10;
-            await gamification.addPoints(pointsToAdd);
-        }
-
         // Check if goal target is reached based on revenue or lead count
         let goalCompleted = false;
         const completionStatus = goalDoc.completionStatus || 'Approved';
