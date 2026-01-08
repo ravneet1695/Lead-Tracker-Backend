@@ -480,7 +480,7 @@ router.put('/:id', requirePermissions('goals.update'), createAuditLog('UPDATE', 
 
         goal = await Goal.findByIdAndUpdate(
             req.params.id,
-            { title, description, target, timeline: normalizedTimeline, group, formSchema, statusOptions, pointsConfig, status: updatedStatus, isExpired, completionStatus },
+            { title, description, target, timeline: normalizedTimeline, group, formSchema, statusOptions, status: updatedStatus, isExpired, completionStatus },
             { new: true, runValidators: true }
         ).populate('organization', 'name code')
             .populate('group', 'name code')

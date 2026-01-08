@@ -273,10 +273,8 @@ router.post('/', requireAuth, async (req, res) => {
                         completedAt: new Date()
                     });
 
-                    // Award bonus points for goal completion (50 points)
-                    if (gamification) {
-                        await gamification.addPoints(50);
-                    }
+
+
 
                     goalCompleted = true;
                 }
@@ -293,10 +291,8 @@ router.post('/', requireAuth, async (req, res) => {
                         completedAt: new Date()
                     });
 
-                    // Award bonus points for goal completion (50 points)
-                    if (gamification) {
-                        await gamification.addPoints(50);
-                    }
+
+
 
                     goalCompleted = true;
                 }
