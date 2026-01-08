@@ -4,8 +4,17 @@ const Role = require('../models/Role');
 const { requirePermissions, protect } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
 const { isSuperAdmin, applyOrganizationFilter, getRoleName } = require('../helpers/commonHelpers');
+const { SYSTEM_PERMISSIONS } = require('../constants/permissions');
 
-// @route   GET /api/roles
+// @route   GET /api/roles/permissions
+// @desc    Get all available permissions registry
+// @access  Private (Admin)
+router.get('/permissions', protect, (req, res) => {
+    res.json({
+        success: true,
+        permissions: SYSTEM_PERMISSIONS
+    });
+});
 // @desc    Get all active roles (filtered by organization for org admins)
 // @access  Private (requires roles.read OR users.create OR users.update permission)
 router.get('/', protect, async (req, res) => {

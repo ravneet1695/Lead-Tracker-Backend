@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const Role = require('../models/Role');
+const { getOrgAdminPermissions } = require('../constants/permissions');
 
 const defaultRoles = [
     {
@@ -16,30 +16,7 @@ const defaultRoles = [
         name: 'org_admin',
         label: 'Organization Admin',
         description: 'Full access within organization scope',
-        permissions: [
-            'users.create',
-            'users.read',
-            'users.update',
-            'users.delete',
-            'groups.create',
-            'groups.read',
-            'groups.update',
-            'groups.delete',
-            'goals.create',
-            'goals.read',
-            'goals.update',
-            'goals.delete',
-            'leads.create',
-            'leads.read',
-            'leads.update',
-            'leads.delete',
-            'dashboard.read',
-            'audit-logs.read',
-            'roles.create',
-            'roles.read',
-            'roles.update',
-            'roles.delete'
-        ],
+        permissions: getOrgAdminPermissions(),
         isSystem: true,
         isActive: true
     }
