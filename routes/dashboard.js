@@ -6,7 +6,6 @@ const Role = require('../models/Role');
 const Goal = require('../models/Goal');
 const GoalEntry = require('../models/GoalEntry');
 const { requireAuth } = require('../middleware/auth');
-const { getRoleName } = require('../helpers/commonHelpers');
 
 // @route   GET /api/dashboard
 // @desc    Get role-based dashboard data
@@ -14,6 +13,15 @@ const { getRoleName } = require('../helpers/commonHelpers');
 router.get('/', requireAuth, async (req, res) => {
     try {
         const user = req.user;
+
+        // Extract filter parameters from query
+        const filters = {
+            goals: req.query.goals ? req.query.goals.split(',') : null,
+            startDate: req.query.startDate ? new Date(req.query.startDate) : null,
+            endDate: req.query.endDate ? new Date(req.query.endDate) : null,
+            status: req.query.status || null
+        };
+
         let dashboardData = {
             role: user.role,
             user: {
@@ -28,22 +36,13 @@ router.get('/', requireAuth, async (req, res) => {
         };
 
         const roleName = req.user.role?.name;
-        const superAdminRole = getRoleName('super_admin');
-        const orgAdminRole = getRoleName('org_admin');
 
         switch (roleName) {
-            case superAdminRole:
-                // Super Admin Dashboard
-                dashboardData = await getSuperAdminDashboard(user);
+            case 'super_admin':
+                dashboardData = await getSuperAdminDashboard(user, filters);
                 break;
-            case orgAdminRole:
-                dashboardData = await getOrgAdminDashboard(user);
-                break;
-            case 'manager':
-                dashboardData = await getManagerDashboard(user);
-                break;
-            case 'sales':
-                dashboardData = await getSalesDashboard(user);
+            case 'org_admin':
+                dashboardData = await getOrgAdminDashboard(user, filters);
                 break;
             default:
                 return res.status(400).json({ message: 'Invalid user role' });
@@ -57,177 +56,38 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // Super Admin Dashboard - Multi-organization view
-async function getSuperAdminDashboard(user) {
-    const totalOrgs = await Organization.countDocuments({ deletedAt: null });
-    const activeOrgs = await Organization.countDocuments({ status: 'active', deletedAt: null });
-    const totalUsers = await User.countDocuments();
-    const totalGoals = await Goal.countDocuments();
-
-    const usersByRole = await User.aggregate([
-        { $group: { _id: '$role', count: { $sum: 1 } } }
-    ]);
-
-    const orgStats = await Organization.aggregate([
-        { $match: { deletedAt: null } },
-        {
-            $lookup: {
-                from: 'users',
-                localField: '_id',
-                foreignField: 'organization',
-                as: 'users'
-            }
-        },
-        {
-            $project: {
-                name: 1,
-                status: 1,
-                userCount: { $size: '$users' },
-                createdAt: 1
-            }
-        },
-        { $sort: { userCount: -1 } },
-        { $limit: 10 }
-    ]);
-
+async function getSuperAdminDashboard(user, filters = {}) {
     return {
-        role: getRoleName('super_admin'),
+        role: 'super_admin',
         user: { name: user.name, email: user.email, role: user.role },
-        stats: {
-            totalOrganizations: totalOrgs,
-            activeOrganizations: activeOrgs,
-            totalUsers,
-            totalGoals,
-            usersByRole: usersByRole.reduce((acc, item) => {
-                acc[item._id] = item.count;
-                return acc;
-            }, {})
-        },
-        charts: {
-            organizationGrowth: orgStats,
-            userDistribution: usersByRole
-        },
-        topOrganizations: orgStats,
-        goalStagesSummary: await getGoalStagesSummary({}),
-        recentActivity: await getRecentActivity(null, 10)
+        goalStagesSummary: await getGoalStagesSummary({}, filters)
     };
 }
 
 // Org Admin Dashboard - Single organization view
-async function getOrgAdminDashboard(user) {
+async function getOrgAdminDashboard(user, filters = {}) {
     if (!user.organization) {
         throw new Error('User not assigned to any organization');
     }
 
-    const organization = await Organization.findById(user.organization);
-    const orgUsers = await User.countDocuments({ organization: user.organization });
-
-    // Get role counts by populating and filtering
-    const managerRole = await Role.findOne({ name: 'manager' });
-    const salesRole = await Role.findOne({ name: 'sales' });
-
-    const orgManagers = managerRole ? await User.countDocuments({ organization: user.organization, role: managerRole._id }) : 0;
-    const orgSales = salesRole ? await User.countDocuments({ organization: user.organization, role: salesRole._id }) : 0;
-
-    const usersByRole = await User.aggregate([
-        { $match: { organization: user.organization } },
-        { $group: { _id: '$role', count: { $sum: 1 } } }
-    ]);
-
-
     return {
-        role: getRoleName('org_admin'),
+        role: 'org_admin',
         user: { name: user.name, email: user.email, role: user.role },
-        organization: {
-            id: organization._id,
-            name: organization.name,
-            status: organization.status
-        },
-        stats: {
-            totalUsers: orgUsers,
-            managers: orgManagers,
-            salesReps: orgSales,
-            usersByRole: usersByRole.reduce((acc, item) => {
-                acc[item._id] = item.count;
-                return acc;
-            }, {})
-        },
-        leaderboard: [],
-        goalStagesSummary: await getGoalStagesSummary({ organization: user.organization }),
-        recentActivity: await getRecentActivity(user.organization, 10)
-    };
-}
-
-// Manager Dashboard - Team view
-async function getManagerDashboard(user) {
-    // Get sales role ID
-    const salesRole = await Role.findOne({ name: 'sales' });
-
-    const teamMembers = await User.find({
-        groups: { $in: user.groups },
-        role: salesRole ? salesRole._id : null
-    });
-
-    const teamMemberIds = teamMembers.map(m => m._id);
-
-    const teamGoalEntries = await GoalEntry.countDocuments({
-        user: { $in: teamMemberIds }
-    });
-
-    const completedEntries = await GoalEntry.countDocuments({
-        user: { $in: teamMemberIds },
-        status: 'approved'
-    });
-
-
-    return {
-        role: 'manager',
-        user: { name: user.name, email: user.email, role: user.role },
-        stats: {
-            teamSize: teamMembers.length,
-            totalEntries: teamGoalEntries,
-            completedEntries,
-            completionRate: teamGoalEntries > 0 ? ((completedEntries / teamGoalEntries) * 100).toFixed(2) : 0
-        },
-        teamPerformance: [],
-        leaderboard: [],
-        goalStagesSummary: await getGoalStagesSummary({ user: { $in: teamMemberIds } }),
-        recentActivity: await getRecentActivity(null, 10, teamMemberIds)
-    };
-}
-
-// Sales Dashboard - Personal view
-async function getSalesDashboard(user) {
-    const myEntries = await GoalEntry.countDocuments({ user: user._id });
-    const completedEntries = await GoalEntry.countDocuments({ user: user._id, status: 'approved' });
-    const pendingEntries = await GoalEntry.countDocuments({ user: user._id, status: 'pending' });
-
-
-    const recentEntries = await GoalEntry.find({ user: user._id })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .populate('goal', 'name');
-
-    return {
-        role: 'sales',
-        user: { name: user.name, email: user.email, role: user.role },
-        stats: {
-            totalEntries: myEntries,
-            completedEntries,
-            pendingEntries,
-            totalPoints: 0,
-            badges: [],
-            level: 1
-        },
-        recentEntries,
-        goalStagesSummary: await getGoalStagesSummary({ user: user._id }),
-        recentActivity: await getRecentActivity(null, 10, [user._id])
+        goalStagesSummary: await getGoalStagesSummary({ organization: user.organization }, filters)
     };
 }
 
 // Helper function to get goal stages summary
-async function getGoalStagesSummary(filter) {
-    const goals = await Goal.find(filter)
-        .select('title statusOptions completionStatus formSchema group')
+async function getGoalStagesSummary(filter, filters = {}) {
+    // Apply goal filter to the base query
+    let goalQuery = { ...filter };
+    if (filters.goals && filters.goals.length > 0) {
+        goalQuery._id = { $in: filters.goals };
+    }
+
+    const goals = await Goal.find(goalQuery)
+        .select('title statusOptions completionStatus formSchema group organization status')
+        .populate('organization', 'name')
         .populate({
             path: 'group',
             select: 'users',
@@ -240,9 +100,29 @@ async function getGoalStagesSummary(filter) {
     const summary = await Promise.all(goals.map(async (goal) => {
         const firstField = goal.formSchema && goal.formSchema[0] ? goal.formSchema[0].fieldName : null;
 
-        const entries = await GoalEntry.find({ goal: goal._id, ...filter })
+        // Build entry query with filters
+        let entryQuery = { goal: goal._id, ...filter };
+
+        // Apply date range filter
+        if (filters.startDate || filters.endDate) {
+            entryQuery.createdAt = {};
+            if (filters.startDate) {
+                entryQuery.createdAt.$gte = filters.startDate;
+            }
+            if (filters.endDate) {
+                entryQuery.createdAt.$lte = filters.endDate;
+            }
+        }
+
+        // Apply status filter
+        if (filters.status) {
+            entryQuery.status = filters.status;
+        }
+
+        const entries = await GoalEntry.find(entryQuery)
             .populate('user', 'name email')
-            .select('user status data _id');
+            .select('user status data _id createdAt');
+
 
         const groupMembers = goal.group?.users || [];
         const memberBreakdownObj = {};
@@ -256,7 +136,7 @@ async function getGoalStagesSummary(filter) {
             };
         });
 
-        // Populate entries
+        // Populate entries (using filtered entries)
         entries.forEach(entry => {
             const userId = entry.user?._id?.toString();
             if (!userId) return;
@@ -312,6 +192,8 @@ async function getGoalStagesSummary(filter) {
         return {
             goalId: goal._id,
             goalTitle: goal.title,
+            organization: goal.organization,
+            status: goal.status,
             completionStatus: goal.completionStatus,
             stages,
             memberBreakdown
@@ -319,33 +201,6 @@ async function getGoalStagesSummary(filter) {
     }));
 
     return summary;
-}
-
-// Helper function to get recent activity
-async function getRecentActivity(organizationId = null, limit = 10, userIds = null) {
-    let query = {};
-
-    if (userIds) {
-        query.user = { $in: userIds };
-    } else if (organizationId) {
-        const orgUsers = await User.find({ organization: organizationId }).distinct('_id');
-        query.user = { $in: orgUsers };
-    }
-
-    const activities = await GoalEntry.find(query)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate('user', 'name email')
-        .populate('goal', 'name');
-
-    return activities.map(entry => ({
-        id: entry._id,
-        type: 'goal_entry',
-        user: entry.user?.name || 'Unknown',
-        goal: entry.goal?.name || 'Unknown',
-        status: entry.status,
-        createdAt: entry.createdAt
-    }));
 }
 
 module.exports = router;
