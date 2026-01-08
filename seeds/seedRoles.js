@@ -33,7 +33,6 @@ const defaultRoles = [
             'leads.read',
             'leads.update',
             'leads.delete',
-            'reports.read',
             'dashboard.read',
             'audit-logs.read',
             'roles.create',
