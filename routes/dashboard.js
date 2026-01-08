@@ -45,7 +45,9 @@ router.get('/', requireAuth, async (req, res) => {
                 dashboardData = await getOrgAdminDashboard(user, filters);
                 break;
             default:
-                return res.status(400).json({ message: 'Invalid user role' });
+                // Handle regular users (sales, managers, etc.)
+                dashboardData = await getRegularUserDashboard(user, filters);
+                break;
         }
 
         res.json(dashboardData);
@@ -77,8 +79,30 @@ async function getOrgAdminDashboard(user, filters = {}) {
     };
 }
 
+// Regular User Dashboard - Restricted to their own leads and assigned goals
+async function getRegularUserDashboard(user, filters = {}) {
+    if (!user.organization) {
+        throw new Error('User not assigned to any organization');
+    }
+
+    // Regular users ONLY see goals for their groups
+    const goalQuery = {
+        organization: user.organization,
+        group: { $in: user.groups || [] }
+    };
+
+    // Regular users ONLY see leads added by them
+    const entryFilter = { user: user._id };
+
+    return {
+        role: user.role?.name || 'user',
+        user: { name: user.name, email: user.email, role: user.role },
+        goalStagesSummary: await getGoalStagesSummary(goalQuery, filters, entryFilter)
+    };
+}
+
 // Helper function to get goal stages summary
-async function getGoalStagesSummary(filter, filters = {}) {
+async function getGoalStagesSummary(filter, filters = {}, entryFilter = {}) {
     // Apply goal filter to the base query
     let goalQuery = { ...filter };
     if (filters.goals && filters.goals.length > 0) {
@@ -98,10 +122,26 @@ async function getGoalStagesSummary(filter, filters = {}) {
         });
 
     const summary = await Promise.all(goals.map(async (goal) => {
-        const firstField = goal.formSchema && goal.formSchema[0] ? goal.formSchema[0].fieldName : null;
+        // More intelligent way to find a "title" field
+        let titleField = null;
+        if (goal.formSchema && goal.formSchema.length > 0) {
+            // Prioritize fields with "name", "hospital", or "hsp" in their alias or name
+            const candidates = goal.formSchema.filter(f =>
+                f.alias?.toLowerCase().includes('name') ||
+                f.fieldName?.toLowerCase().includes('name') ||
+                f.alias?.toLowerCase().includes('hospital') ||
+                f.alias?.toLowerCase().includes('hsp')
+            ).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+            titleField = candidates.length > 0 ? candidates[0].fieldName : goal.formSchema[0].fieldName;
+        }
+
+        const statusOptions = goal.statusOptions && goal.statusOptions.length > 0
+            ? goal.statusOptions
+            : ['New', 'In Progress', 'Completed', 'Cancelled'];
 
         // Build entry query with filters
-        let entryQuery = { goal: goal._id, ...filter };
+        let entryQuery = { goal: goal._id, ...filter, ...entryFilter };
 
         // Apply date range filter
         if (filters.startDate || filters.endDate) {
@@ -127,12 +167,21 @@ async function getGoalStagesSummary(filter, filters = {}) {
         const groupMembers = goal.group?.users || [];
         const memberBreakdownObj = {};
 
-        // Pre-populate all group members
+        // Helper to initialize stages for a member
+        const initMemberStages = () => {
+            const stages = {};
+            statusOptions.forEach(status => {
+                stages[status] = [];
+            });
+            return stages;
+        };
+
+        // Pre-populate all group members with ALL possible status options
         groupMembers.forEach(user => {
             memberBreakdownObj[user._id.toString()] = {
                 userId: user._id.toString(),
                 userName: user.name,
-                stages: {}
+                stages: initMemberStages()
             };
         });
 
@@ -147,16 +196,17 @@ async function getGoalStagesSummary(filter, filters = {}) {
                 memberBreakdownObj[userId] = {
                     userId,
                     userName: entry.user.name,
-                    stages: {}
+                    stages: initMemberStages()
                 };
             }
 
+            // If the status isn't in statusOptions, ensure it's initialized
             if (!memberBreakdownObj[userId].stages[status]) {
                 memberBreakdownObj[userId].stages[status] = [];
             }
 
-            const leadTitle = firstField && entry.data?.[firstField]
-                ? entry.data[firstField]
+            const leadTitle = titleField && entry.data?.[titleField]
+                ? entry.data[titleField]
                 : `Lead ${entry._id.toString().slice(-6)}`;
 
             memberBreakdownObj[userId].stages[status].push({
@@ -176,8 +226,13 @@ async function getGoalStagesSummary(filter, filters = {}) {
             }))
         }));
 
-        // Calculate stage totals
+        // Calculate overall stage totals for this goal
         const stageTotals = {};
+        // Initialize all status options to 0
+        statusOptions.forEach(status => {
+            stageTotals[status] = 0;
+        });
+
         memberBreakdown.forEach(member => {
             member.stages.forEach(stage => {
                 stageTotals[stage.status] = (stageTotals[stage.status] || 0) + stage.count;
@@ -194,6 +249,7 @@ async function getGoalStagesSummary(filter, filters = {}) {
             goalTitle: goal.title,
             organization: goal.organization,
             status: goal.status,
+            statusOptions: statusOptions, // Return full list for frontend reference
             completionStatus: goal.completionStatus,
             stages,
             memberBreakdown
